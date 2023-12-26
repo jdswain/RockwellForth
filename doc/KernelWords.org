@@ -1,0 +1,187 @@
+!
+
+#  ( |d| — |d| )
+Convert next digit of double-precision number and add character to output string.
+
+#>  ( |d| --- addr u )
+Terminate output string (ready for TYPE ).
+
+#S  ( |d| --- 00)
+Convert all significant digits of double-precision number to output string.
+
+(+LOOP)
+(.")
+(DO)
+(FIND)
+(LOOP)
+<NUMBER)
+*
+*/
+*/MOD
++
++!
++-
+-
+-DUP
+-TRAILING
+.
+.R
+/
+/MOD
+0
+0<
+0=
+0BRANCH
+1
+1+
+1-
+2
+2+
+2-
+2DROP
+2DUP
+3
+4
+;S
+<
+<#
+=
+>
+>R
+?
+?TERMINAL
+@
+ABS
+AND
+BANKC!
+BANKC@
+BANKEEC!
+BANKEXECUTE
+BASE
+
+BL ( --- c )
+Put a SPACE character (ASCII $20) on the stack.
+
+BLANKS
+BOUNDS
+BRANCH
+C!
+
+C/L  ( --- n)
+Maximum number of characters per line.
+
+C@
+CLD/WRM
+CLIT
+CMOVE
+COLD  ( --- )
+RSC-FORTH cold start.
+
+COUNT
+
+CR  ( --- )
+Output a carriage return and line feed to the serial line.
+
+D+
+D+-
+D.
+D.R
+DABS
+DECIMAL
+DIGIT
+
+DISK  ( addr n b --- )
+Accesses disk, read if b=1, write if b=0, block number n at addr.
+
+DNEGATE
+DPL
+
+DREAD  ( addr n --- err )
+Reads mupliple (4) disk sectors starting at sector 4n + 1 of selected disk, current track to addr and leaves the disk error byte.
+
+DROP
+DUP
+
+DWRITE  ( addr n --- err )
+Writes multiple (4) disk sectors starting at sector 4n + 1 of selected disk, current track to addr and leaves the disk error byte.
+
+EEC!
+EMIT
+ENCLOSE
+ERASE
+
+EXECUTE  (addr --- )
+Execute the definition CFA on top of the stack.
+
+EXPECT  ( addr n --- )
+Read n characters (or until carriage return) from input to address.
+
+FILL
+HEX
+HLD
+HOLD
+
+IN  ( --- addr )
+User variable containing current offset within input buffer.
+
+INIT  ( --- )
+Sets current tracks in CYLINDER to $FF's, which forces recalibration on next disk access.
+
+KEY
+LEAVE
+
+LIT  ( --- n )
+Place 16-bit literal on the stack.
+
+M*
+M/
+M/MOD
+MAX
+MIN
+MOD
+NEGATE
+OR
+OVER
+PAD
+PICK
+
+QUERY  ( --- )
+Input text from terminal.
+
+R
+R>
+RP!
+RP@
+R0
+ROT
+S->D
+S0
+
+SEEK  ( n --- )
+Seeks track n on selected drive.
+
+SELECT  ( n --- )
+Selects disk drive n, n=0-3.
+
+SIGN
+SP!
+SP@
+SPACE
+SPACES
+SWAP
+
+TIB  ( --- addr )
+Terminal input buffer start addr.
+
+TOGGLE
+TYPE
+U*
+U/
+U<
+UC/L
+UPAD
+
+UR/W  ( --- addr )
+Puts the code field address on stack.
+
+XOR
