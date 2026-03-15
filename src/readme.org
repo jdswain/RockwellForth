@@ -1,0 +1,12 @@
+* Files
+
+ForthKernel - the 4k Kernel ROM
+ForthDevelopment - the 8k Development ROM
+
+The *-Rockwell versions are the original, these were tested to assemble byte-for-byte to match the Rockwell ROMS.
+
+The * versions are the standard versions for either the R6501Q, 6502, 65C02, or 65C816 native mode.
+
+The *-RC19 versions target the Rockwell 65C19 series of microcontrollers, up until the final standalone microcontroller the L28. These microcontrollers all share the same instruction set.
+
+Currently the RC19 branch does not make use of the special forth instructions.

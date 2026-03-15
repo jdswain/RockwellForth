@@ -1,0 +1,786 @@
+#+TITLE: TI Direct-Threaded Forth for the R65C19
+#+AUTHOR: RSC-FORTH V3.0 Technical Reference
+#+OPTIONS: toc:t num:t
+
+* Overview
+
+This document describes the Direct-Threaded Code (DTC) implementation of
+RSC-FORTH V3.0 for the R65C19 (L28) microcontroller. The implementation
+exploits the R65C19's hardware Threaded Interpretive (TI) instruction set
+to build an unusually efficient Forth inner interpreter.
+
+The system descends from FIG-FORTH, originally translated for the
+Rockwell System-65 by W.F. Ragsdale. This version replaces the original
+Indirect-Threaded Code (ITC) model with DTC, enabled by the R65C19's
+native support for threaded interpretation.
+
+** Architecture at a Glance
+
+| Component        | Implementation                           |
+|------------------+------------------------------------------|
+| Instruction Ptr  | Hardware I register (16-bit)             |
+| NEXT             | Single NXT opcode                        |
+| Data stack       | Page 2 ($0200), indexed by Y register    |
+| Return stack     | Page 1 ($0100), hardware stack via S     |
+| Code field       | JSR DOxxx (3 bytes) or native code       |
+| Thread body      | Array of 16-bit direct code addresses    |
+| Scratch register | X (free, no XSAVE needed)               |
+
+* The R65C19 TI Instruction Set
+
+The R65C19 extends the 65C02 with four instructions designed specifically
+for threaded language interpreters. These form the hardware foundation of
+the Forth inner interpreter.
+
+** I Register
+
+The I register is a 16-bit register internal to the CPU that serves as
+the Forth instruction pointer (IP). In a standard 6502 FIG-FORTH, the IP
+is a pair of zero-page bytes requiring explicit load/store/increment
+sequences. The I register eliminates this overhead entirely.
+
+** NXT — Next Thread Dispatch
+
+Opcode $8B. Performs two operations in a single instruction cycle:
+
+1. Loads the 16-bit value at =(I)= into the Program Counter
+2. Advances I by 2: =I := I + 2=
+
+This is the complete inner interpreter for DTC Forth. Each word in a
+thread body is a direct 16-bit pointer to executable code; NXT fetches
+the pointer and jumps to it.
+
+** PHI — Push I to Hardware Stack
+
+Opcode $CB. Pushes the 16-bit I register onto the page 1 hardware stack
+(2 bytes, high byte first). SP decrements by 2. Used by DOCOL to save
+the caller's IP before entering a colon definition.
+
+** PLI — Pull I from Hardware Stack
+
+Opcode $DB. Pops 2 bytes from the hardware stack into the I register
+(low byte first, then high byte). SP increments by 2. Used by SEMIS to
+restore the caller's IP when exiting a colon definition.
+
+** LAN — Load A from (I), Increment I
+
+Opcode $AB. Loads the byte at =(I)= into the accumulator and increments
+I by 1. Used by LIT, CLIT, and BRAN to fetch inline data bytes from the
+thread body.
+
+** Addressing Mode Changes
+
+The R65C19 also changes some 6502 addressing modes:
+
+- =(zp,X)= pre-indexed indirect becomes =(zp)= plain indirect
+- =(zp),Y= post-indexed becomes =(zp),X= post-indexed by X
+- =ASL abs,Y=, =ROL abs,Y=, =INC abs,Y= are unavailable; the kernel
+  uses load-into-A / operate / store-back sequences instead
+
+These changes are why X becomes the free scratch register and Y becomes
+the data stack pointer, reversing the original FIG-FORTH assignment.
+
+* Threading Model
+
+** ITC vs DTC
+
+In the original ITC FIG-FORTH, every word has a 2-byte code field
+containing a pointer:
+
+#+begin_example
+  ITC:  CFA contains  DATA.W DOCOL    (2 bytes, a pointer)
+        NEXT does:    W = (IP); IP += 2; PC = (W)  (double indirection)
+#+end_example
+
+In DTC, the code field contains executable machine code:
+
+#+begin_example
+  DTC:  CFA contains  JSR DOCOL       (3 bytes, an instruction)
+        NEXT does:    PC = (I); I += 2              (single indirection)
+#+end_example
+
+The thread body layout is identical in both models — a flat array of
+16-bit addresses. The difference is what those addresses point to:
+
+- ITC: addresses point to code field cells that contain a pointer to code
+- DTC: addresses point directly to executable code
+
+DTC eliminates one level of indirection per word dispatch.
+
+** NEXT — The Inner Interpreter
+
+The inner interpreter checks for cooperative interrupts, then dispatches:
+
+#+begin_src asm
+  NEXT:   BIT INTFLAG        ; check interrupt flag
+          BMI HANDLEINT      ; bit 7 set = interrupt pending
+  NOINT:  NXT                ; (I) -> PC, I + 2 -> I
+#+end_src
+
+For each word in a thread, NXT reads the 2-byte address at I, jumps to
+that address, and advances I past it. If the target is a primitive, NXT
+jumps directly into machine code. If it is a colon definition, NXT jumps
+to a =JSR DOCOL= instruction.
+
+** DOCOL — Enter a Colon Definition
+
+When NXT jumps to a colon definition's CFA, it executes =JSR DOCOL=.
+The JSR pushes the return address onto the hardware stack. On the
+R65C19, JSR pushes the address of the byte /after/ the JSR instruction
+(unlike the standard 6502 which pushes PC-1). This return address is
+exactly the PFA — the start of the word's thread body.
+
+#+begin_src asm
+  DOCOL:  PLA            ; PFA_lo from hardware stack
+          TAX            ; save in X
+          PLA            ; PFA_hi
+          PHI            ; save caller's I on return stack
+          PHA            ; push PFA_hi   ⎫
+          TXA            ;               ⎬ set up for PLI
+          PHA            ; push PFA_lo   ⎭
+          PLI            ; I = PFA
+          JMP NEXT       ; begin executing the new thread
+#+end_src
+
+The sequence: (1) recover the PFA from the JSR return address, (2) save
+the caller's I register via PHI, (3) load the PFA into I via PLI, (4)
+begin dispatching the new thread.
+
+Net effect on the return stack: one 2-byte entry pushed (the caller's I).
+
+** SEMIS — Exit a Colon Definition (;S)
+
+#+begin_src asm
+  SEMIS:  PLI            ; restore caller's I from return stack
+          JMP NEXT       ; resume the caller's thread
+#+end_src
+
+PLI pops 2 bytes from the hardware stack into I, restoring the caller's
+instruction pointer. Execution resumes in the calling word's thread.
+
+** EXECUTE
+
+#+begin_src asm
+  EXECUTE: LDA stack,Y      ; CFA_lo from data stack
+           STA W
+           LDA stack+1,Y    ; CFA_hi
+           STA W+1
+           INY               ; pop
+           INY
+           JMP (W)           ; jump to CFA
+#+end_src
+
+EXECUTE pops a code field address from the data stack and jumps to it
+through the W zero-page pointer. For a colon definition, this jumps to
+the =JSR DOCOL= instruction at the CFA. For a primitive, it jumps
+directly into machine code.
+
+Note: =JMP (W)= is an indirect jump /through the zero-page pointer W/,
+not through the target code. W contains the CFA address; the CPU reads
+that address from W and jumps there.
+
+* Stack Architecture
+
+** Data Stack — Page 2
+
+The data stack occupies page 2 ($0200-$02FF), indexed by the Y register.
+Y points to the low byte of the top-of-stack (TOS). The stack grows
+downward:
+
+#+begin_example
+  TOS low byte:   stack,Y     = $0200+Y
+  TOS high byte:  stack+1,Y   = $0201+Y
+  NOS low byte:   stack+2,Y   = $0202+Y
+  NOS high byte:  stack+3,Y   = $0203+Y
+#+end_example
+
+Push: =DEY; DEY= to allocate, then store.
+Pop: =INY; INY= to deallocate.
+
+The initial stack pointer is $C2, set during COLD boot (=LDY #$C2=).
+The S0 user variable stores the reset value for =SP!=.
+
+** Return Stack — Page 1
+
+The return stack is the hardware stack at $0100-$01FF, managed by the S
+register. It is shared between:
+
+- PHI/PLI: saving and restoring the I register (2 bytes each)
+- PHA/PLA: used by >R, R>, and various primitives (1 byte each)
+- JSR/RTS: used by DOxxx routines and native subroutine calls
+
+All three mechanisms interoperate on the same physical stack. The
+critical invariant is that PHI pushes 2 bytes and PLI pops 2 bytes, so
+they must always be balanced. Similarly, PHA-based return stack
+operations (>R pushes 2 bytes via PHA/PHA; R> pops 2 bytes via PLA/PLA)
+must be balanced.
+
+The initial stack pointer is $FF (set by =LDX #$FF; TXS= during RESET).
+The R0 user variable stores the reset value for =RP!=.
+
+** PUSH / PUT_ Convention
+
+Many primitives end by pushing a result onto the data stack. The kernel
+uses a shared tail-call convention:
+
+#+begin_src asm
+  PUSH:   DEY            ; allocate cell
+          DEY
+  PUT_:   STA stack+1,Y  ; store high byte from A
+          PLA            ; pull low byte from hardware stack
+          STA stack,Y    ; store low byte
+          ; falls through to NEXT
+#+end_src
+
+Before jumping to PUSH, the caller must have:
+- A = high byte of the value
+- Hardware stack top = low byte (placed there via PHA)
+
+PUT_ is the entry point for overwriting TOS without allocating (used by @
+and other operations that transform TOS in place).
+
+* Register Allocation
+
+| CPU Register | Forth Usage                                        |
+|--------------+----------------------------------------------------|
+| I            | Instruction Pointer (IP) — hardware TI register    |
+| Y            | Data stack pointer (indexes page 2)                |
+| X            | Free scratch — used for (zp),X and loop counters   |
+| A            | Accumulator — general purpose                      |
+| S            | Return stack pointer (hardware stack, page 1)      |
+
+| Zero Page    | Address | Usage                                     |
+|--------------+---------+-------------------------------------------|
+| IRQVEC       | $0040   | User IRQ vector                           |
+| NMIVEC       | $0042   | User NMI vector                           |
+| UKEY         | $0044   | Keyboard input vector                     |
+| UEMIT        | $0046   | Character output vector                   |
+| UP           | $0048   | User area base pointer                    |
+| INTFLAG      | $004A   | Cooperative interrupt flag                |
+| W            | $004C   | Code field pointer (2 bytes)              |
+| N            | $004E   | Scratch workspace (8 bytes, $004E-$0055)  |
+| INTVEC       | $0056   | Cooperative interrupt target              |
+| TOS          | $0058   | Temporary top-of-stack                    |
+
+X is free at all times during Forth execution — there is no XSAVE
+mechanism. This is a significant simplification over the original
+FIG-FORTH, where X was the data stack pointer and had to be
+saved/restored around any code that needed X for other purposes.
+
+* Memory Map
+
+| Address       | Size  | Contents                                  |
+|---------------+-------+-------------------------------------------|
+| $0000-$003F   | 64    | L28 hardware I/O registers                |
+| $0040-$0059   | 26    | Forth zero-page variables (see above)     |
+| $0100-$01FF   | 256   | Return stack (hardware stack, page 1)     |
+| $0200-$02FF   | 256   | Data stack (page 2, indexed by Y)         |
+| $0300-$031D   | 30    | User variables (UP area)                  |
+| $031E-$037D   | 96    | Development ROM workspace                 |
+| $0380-$03FF   | 128   | Terminal Input Buffer (TIB)               |
+| $0800-$0806   |  7    | Disk controller registers                 |
+| $1000+        |       | Dictionary / heap (RAM)                   |
+| $C000-$E11E   | ~8K   | Development ROM                           |
+| $F000-$FFFF   | 4K    | Kernel ROM                                |
+
+* Dictionary Structure
+
+Each word in the dictionary has four fields:
+
+#+begin_example
+  NFA:     name field     — counted string with flags
+  LFA:     link field     — 2-byte pointer to previous word's NFA
+  PFAPTR:  PFA pointer    — 2-byte pointer to the parameter field
+  CFA:     code field     — 3-byte JSR DOxxx (or native machine code)
+  PFA:     parameter field — word-type-specific data
+#+end_example
+
+** Name Field (NFA)
+
+Encoded with the =text.7= assembler directive. The first byte contains:
+
+| Bits | Meaning                                    |
+|------+--------------------------------------------|
+| 0-4  | Name length (1-31 characters)              |
+| 5    | Smudge bit (1 = hidden during compilation) |
+| 6    | Immediate flag (1 = execute in compile mode)|
+| 7    | Always 1 (marks start of name)             |
+
+Bit 7 is also set on the last character of the name. Interior characters
+have bit 7 clear. This encoding allows forward and backward traversal of
+the name string.
+
+Examples:
+- =$83= "DUP" — length 3, not immediate
+- =$C1= ":" — length 1, immediate (bit 6 set)
+- =$C1= "\0" — length 1, immediate; the _FX end-of-input sentinel
+
+** Link Field (LFA)
+
+A 2-byte pointer to the NFA of the previous word. The dictionary is a
+singly-linked list threaded backward. A zero link marks the end of the
+vocabulary.
+
+** PFA Pointer (PFAPTR)
+
+A 2-byte field that points to the PFA. In DTC, for ALL word types:
+
+#+begin_example
+  PFAPTR = CFA + 3
+#+end_example
+
+This is true for both JSR-based words (colon defs, constants, variables,
+user variables, DOES> words) and for primitives. Even though primitives
+have no JSR prefix, their PFAPTR is still set to =WORD+3= so that the
+CFA computation works uniformly:
+
+#+begin_example
+  CFA = PFAPTR - 3
+#+end_example
+
+The CFA Forth word implements this directly:
+
+#+begin_src asm
+  CFA:  JSR DOCOL
+        DATA.W AT          ; fetch PFAPTR value
+        DATA.W LIT
+        DATA.W $0003
+        DATA.W SUB         ; PFAPTR - 3 = CFA
+        DATA.W SEMIS
+#+end_src
+
+** Code Field (CFA)
+
+In DTC, the code field contains one of:
+
+| Word type        | CFA contents      | Size |
+|------------------+-------------------+------|
+| Colon definition | =JSR DOCOL= ($20) | 3    |
+| Constant         | =JSR DOCON= ($20) | 3    |
+| Variable         | =JSR DOVAR= ($20) | 3    |
+| User variable    | =JSR DOUSE= ($20) | 3    |
+| DOES> word       | =JSR DOES=  ($20) | 3    |
+| Primitive        | Machine code      | var  |
+
+All JSR-based words start with opcode $20. Primitives start with
+whatever their first machine instruction happens to be. This difference
+is exploited by HWORD, which tests =CFA C@ $20 == to distinguish
+primitives from JSR-based words.
+
+* DOxxx Runtime Routines
+
+All DOxxx routines share a common entry pattern: the JSR at the CFA
+pushes the return address (= PFA) onto the hardware stack. Each routine
+pulls this address with PLA to locate its parameter field.
+
+** DOCOL — Colon Definition Runtime
+
+See the Threading Model section above. Saves the caller's I via PHI,
+loads the PFA into I via PLI, resumes with JMP NEXT.
+
+** DOCON — Constant Runtime
+
+#+begin_src asm
+  DOCON:  PLA            ; PFA_lo
+          STA N
+          PLA            ; PFA_hi
+          STA N+1        ; N = PFA
+          LDA (N)        ; constant_lo
+          PHA
+          LDX #1
+          LDA (N),X      ; constant_hi
+          JMP PUSH       ; push 16-bit constant
+#+end_src
+
+PFA contains a 2-byte constant value. DOCON reads it indirectly through
+N and pushes it on the data stack.
+
+Example:
+
+#+begin_src asm
+  ZERO:   JSR DOCON
+          DATA.W 0       ; PFA: the constant value
+#+end_src
+
+** DOVAR — Variable Runtime
+
+#+begin_src asm
+  DOVAR:  PLA            ; PFA_lo
+          STA N
+          PLA            ; PFA_hi
+          DEY
+          DEY
+          STA stack+1,Y  ; push PFA_hi
+          LDA N
+          STA stack,Y    ; push PFA_lo
+          JMP NEXT
+#+end_src
+
+DOVAR pushes the PFA address itself onto the data stack. The variable's
+value lives at PFA; the user applies =@= or =!= to read or write it.
+
+** DOUSE — User Variable Runtime
+
+#+begin_src asm
+  DOUSE:  PLA            ; PFA_lo
+          STA N
+          PLA            ; PFA_hi
+          STA N+1        ; N = PFA
+          CLC
+          LDA (N)        ; offset byte (single byte at PFA)
+          ADC UP         ; add user area base_lo
+          PHA            ; computed address_lo
+          LDA #$00
+          ADC UP+1       ; add carry to base_hi
+          JMP PUSH       ; push the user variable's address
+#+end_src
+
+PFA contains a single byte — an offset into the user area (base address
+in UP, typically $0300). DOUSE adds this offset to UP and pushes the
+resulting address.
+
+Example:
+
+#+begin_src asm
+  BASE:   JSR DOUSE
+          DATA.B $0C     ; PFA: offset $0C into user area
+#+end_src
+
+** DOES — DOES> Runtime
+
+#+begin_src asm
+  DOES:   PLA            ; PFA_lo
+          STA N
+          PLA            ; PFA_hi
+          STA N+1        ; N = PFA
+          PHI            ; save caller's I (enter nested definition)
+          LDX #1
+          LDA (N),X      ; DOES body_hi (from PFA+1)
+          PHA
+          LDA (N)        ; DOES body_lo (from PFA+0)
+          PHA
+          PLI            ; I = DOES body address
+          CLC
+          LDA N
+          ADC #2         ; PFA + 2 = parameter data area
+          PHA
+          LDA N+1
+          ADC #0
+          JMP PUSH       ; push data area address on data stack
+#+end_src
+
+DOES handles words created with =<BUILDS ... DOES>=. The PFA contains a
+2-byte pointer to the DOES> body (a Forth thread), followed by the
+word's instance data. DOES:
+
+1. Saves the caller's I (like DOCOL, entering a nested definition)
+2. Loads the DOES> body address from PFA into I
+3. Pushes PFA+2 (the instance data address) on the data stack
+4. Resumes via JMP NEXT, executing the DOES> body
+
+The DOES> body receives the data address on the stack and can operate on
+the instance data. This is Forth's mechanism for defining new data types.
+
+* Branching
+
+Branch offsets in the thread body are signed 16-bit values relative to
+the address of the offset itself.
+
+** BRAN — Unconditional Branch
+
+#+begin_src asm
+  BRAN:   PHI            ; save I (points to offset in thread)
+          LAN            ; offset_lo, I advances
+          STA N
+          LAN            ; offset_hi, I advances
+          STA N+1
+          PLA            ; saved I_lo (before LAN advanced it)
+          CLC
+          ADC N          ; I_lo + offset_lo
+          STA N+2
+          PLA            ; saved I_hi
+          ADC N+1        ; I_hi + offset_hi + carry
+          PHA            ; new I_hi  ⎫
+          LDA N+2        ;           ⎬ for PLI
+          PHA            ; new I_lo  ⎭
+          PLI            ; I = original_I + offset
+          JMP NEXT
+#+end_src
+
+The key insight: PHI saves I /before/ the LAN instructions read and
+advance past the offset bytes. The offset is then added to this saved
+(pre-advance) I value. This means the offset is relative to the address
+of the offset's first byte in the thread.
+
+** ZBRAN — Conditional Branch (0BRANCH)
+
+#+begin_src asm
+  ZBRAN:  INY            ; pop TOS
+          INY
+          LDA stack-2,Y  ; test popped value_lo
+          ORA stack-1,Y  ; OR with value_hi
+          BEQ BRAN       ; if zero: take branch
+  BUMP:   LAN            ; not zero: skip offset_lo
+          LAN            ; skip offset_hi
+          JMP NEXT
+#+end_src
+
+Pops TOS and tests if it was zero. If zero, falls through to BRAN. If
+nonzero, BUMP skips the 2-byte offset using two LAN instructions (which
+advance I past the offset) and continues to NEXT.
+
+** DO / LOOP / +LOOP
+
+DO pops the index and limit from the data stack and pushes them onto the
+return stack (4 bytes: index_lo, index_hi, limit_lo, limit_hi).
+
+LOOP increments the index on the return stack, compares with the limit,
+and either branches back (loop continues) or cleans up the return stack
+and skips the branch offset (loop done).
+
++LOOP adds a variable step (from the data stack) to the index instead of
+always incrementing by 1.
+
+* Word Compilation
+
+** DCSTOR — Write a DTC Code Field
+
+DCSTOR writes the 3-byte JSR instruction at a word's CFA:
+
+#+begin_src asm
+  DCSTOR:  JSR DOCOL
+           DATA.W LATEST       ; get most recent word's NFA
+           DATA.W PFAPTR       ; compute PFAPTR field address
+           DATA.W CFA          ; compute CFA address
+           DATA.W DUP
+           DATA.W LIT
+           DATA.W $0020        ; $20 = JSR opcode
+           DATA.W SWAP
+           DATA.W CSTOR        ; store $20 at CFA
+           DATA.W ONEPLUS      ; CFA + 1
+           DATA.W STORE        ; store 2-byte target address at CFA+1
+           DATA.W RFROM        ; tail-call: drop return address
+           DATA.W DROP
+           DATA.W SEMIS
+#+end_src
+
+The data stack entry to DCSTOR is the target address (e.g., DOCOL). The
+sequence writes =$20= (JSR opcode) at the CFA, then the 2-byte target
+address at CFA+1 and CFA+2. The =RFROM DROP= at the end is a tail-call
+optimization — it discards the return address of the word that called
+DCSTOR, since compilation is complete.
+
+** COLON (:)
+
+#+begin_src asm
+  COLON:   JSR DOCOL
+           DATA.W QEXEC        ; error if already compiling
+           DATA.W STORCSP       ; save stack pointer for checking
+           DATA.W CURRENT
+           DATA.W AT
+           DATA.W CONTEXT
+           DATA.W STORE         ; CONTEXT = CURRENT
+           DATA.W CREATE        ; build dictionary header
+           DATA.W RBRAC         ; enter compile state
+           DATA.W LIT
+           DATA.W DOCOL         ; push address of DOCOL
+           DATA.W DCSTOR        ; write JSR DOCOL at CFA
+#+end_src
+
+** SEMICOLON (;)
+
+Compiles SEMIS into the thread, turns off smudge bit, checks stack
+balance, returns to interpret state.
+
+** (;CODE) — Patch CFA to JMP
+
+For CODE definitions and =;CODE=, the CFA is patched with a =JMP=
+instruction ($4C) instead of =JSR=:
+
+#+begin_src asm
+  PSEMICODE: JSR DOCOL
+             DATA.W RFROM        ; get inline code address
+             DATA.W LATEST
+             DATA.W PFAPTR
+             DATA.W CFA
+             DATA.W DUP
+             DATA.W LIT
+             DATA.W $004C        ; $4C = JMP opcode
+             DATA.W SWAP
+             DATA.W CSTOR        ; store JMP at CFA
+             DATA.W ONEPLUS
+             DATA.W STORE        ; store target address at CFA+1
+             DATA.W SEMIS
+#+end_src
+
+Primitives created via =;CODE= have a JMP at their CFA that jumps
+directly to the machine code body. Unlike JSR-based words, JMP does not
+push a return address, so the machine code does not need to (and must
+not) execute PLA to recover a PFA.
+
+* Boot Sequence
+
+** RESET / COLD
+
+On power-up or reset, the CPU vectors to RESET which:
+
+1. Initializes the hardware stack (=LDX #$FF; TXS=)
+2. Clears decimal mode and interrupt flag
+3. Configures the ACIA for 9600 baud 8N1 serial I/O
+4. Sets the I/O vectors (UKEY/UEMIT) to point to XKEY/XEMIT
+5. Sets UP to $0300 (user area base)
+6. Copies initial values from INITTAB to the user area
+7. On cold boot: initializes interrupt vectors to COLD
+8. Loads I with the address of DSKBOOT (fallback thread)
+9. Initializes the data stack pointer (=LDY #$C2=)
+10. Scans memory from $0400 upward in 1K increments looking for the ROM
+    signature =$5A $A5=
+
+** ROM Scan
+
+#+begin_src asm
+  L1525:  LDA (TOS)        ; check for $5A
+          CMP #$5a
+          BNE L1540
+          LDX #1
+          LDA (TOS),X      ; check for $A5
+          CMP #$a5
+          BNE L1540
+          ; signature found — read entry point
+          LDX #2
+          LDA (TOS),X      ; IP_lo
+          STA N
+          LDX #3
+          LDA (TOS),X      ; IP_hi
+          PHA
+          LDA N
+          PHA
+          PLI              ; I = entry point from ROM header
+  L1539:  JMP NEXT         ; begin execution
+#+end_src
+
+The development ROM at $C000 begins with the signature =$A55A= (which
+appears as bytes $5A, $A5 in little-endian), followed by a 2-byte entry
+point address. The ROM scan finds this, loads the entry point into I, and
+begins Forth execution via JMP NEXT.
+
+** ABORT → QUIT → INTERPRET
+
+The boot chain after ROM scan is:
+
+1. Development ROM entry (KSTART) performs cold/warm initialization,
+   then calls ABORT
+2. ABORT resets the data stack, prints the banner "RSC-FORTH V3.0",
+   sets FORTH DEFINITIONS, then calls QUIT
+3. QUIT is the outer interpreter loop:
+
+#+begin_src asm
+  QUIT:   JSR DOCOL
+          DATA.W ZERO
+          DATA.W BLK
+          DATA.W STORE       ; BLK = 0 (keyboard input)
+          DATA.W LBRAC       ; STATE = 0 (interpret mode)
+  loop:   DATA.W RPSTO       ; reset return stack
+          DATA.W CR
+          DATA.W QUERY       ; read a line of input
+          DATA.W INTERPRET   ; interpret it
+          DATA.W STATE
+          DATA.W AT
+          DATA.W ZEQ
+          DATA.W ZBRAN       ; if compiling, skip "OK"
+          DATA.W ...
+          DATA.W PDOTQ       ; print "OK"
+          DATA.W BRAN        ; loop back to RPSTO
+#+end_src
+
+RPSTO inside QUIT intentionally resets the return stack to $01FF on each
+iteration. This discards the saved I that QUIT's own DOCOL pushed — QUIT
+never returns; it loops forever.
+
+INTERPRET parses words from the input, looks them up in the dictionary,
+and either executes them (interpret mode) or compiles them (compile
+mode). When the input is exhausted, a sentinel word named NUL (a single
+$00 byte, marked IMMEDIATE) is found by the dictionary search. This
+word, _FX, executes =R> DROP SEMIS= which pops INTERPRET's return
+address and returns directly to QUIT.
+
+* Cooperative Interrupt Mechanism
+
+The kernel provides a cooperative interrupt system checked on every word
+dispatch:
+
+#+begin_src asm
+  NEXT:      BIT INTFLAG      ; test interrupt flag
+             BMI HANDLEINT    ; bit 7 = interrupt pending
+  NOINT:     NXT              ; no interrupt, dispatch next word
+
+  HANDLEINT: BVS NOINT        ; bit 6 = interrupts disabled, ignore
+             LDA INTVEC       ; load interrupt handler address
+             STA W
+             LDA INTVEC+1
+             STA W+1
+             LDA #$40         ; set "disabled" flag
+             STA INTFLAG
+             JMP (W)          ; dispatch to handler
+#+end_src
+
+| INTFLAG value | Meaning                              |
+|---------------+--------------------------------------|
+| $00           | No interrupt pending, enabled         |
+| $80+          | Interrupt pending (bit 7 set)        |
+| $40           | Interrupts disabled (bit 6 set)      |
+
+Hardware interrupt service routines set bit 7 of INTFLAG. At the next
+word boundary, NEXT detects this and redirects execution to the Forth
+word at INTVEC. This provides safe, word-granularity interrupt handling
+without the complexities of preemptive interrupts inside Forth
+primitives.
+
+* Serial I/O
+
+I/O is vectored through zero-page pointers, allowing redirection:
+
+#+begin_src asm
+  ;; EMIT calls through UEMIT vector
+  EMIT:   LDA #$0D         ; example: emit CR
+          JSR (UEMIT)      ; indirect through vector
+          ...
+
+  ;; Default XEMIT — poll ACIA TDRE then write
+  XEMIT:  PHA
+  .wait:  LDA ACIA_STATUS
+          AND #$10          ; bit 4 = TX ready
+          BEQ .wait
+          PLA
+          STA ACIA_DATA     ; write to ACIA
+          RTS
+
+  ;; Default XKEY — poll ACIA RDRF then read
+  XKEY:   LDA ACIA_STATUS
+          AND #$08          ; bit 3 = RX data available
+          BEQ XKEY
+          LDA ACIA_DATA     ; read from ACIA
+          RTS
+#+end_src
+
+The CR primitive sends $0D (CR), $0A (LF), and $00 (NUL, for timing on
+slow terminals).
+
+* Summary
+
+The TI DTC Forth for the R65C19 achieves an unusually compact and
+efficient Forth implementation by exploiting hardware support for
+threaded interpretation:
+
+- The inner interpreter (NEXT) is a single instruction: =NXT=
+- Colon definition entry/exit uses hardware register save/restore:
+  =PHI= / =PLI=
+- Inline data fetch uses auto-incrementing loads: =LAN=
+- The data stack is hardware-indexed via Y, the return stack via S
+- X is permanently free for scratch use
+- The thread body is a flat array of direct code pointers — no
+  indirection cells, no CFA-hopping
+
+The result is a FIG-FORTH system that retains full source compatibility
+at the Forth level while achieving meaningfully better performance than
+a traditional 6502 ITC implementation.

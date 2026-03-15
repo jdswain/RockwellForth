@@ -36,8 +36,40 @@
 
 ; This version targets the R6501Q microcontroller. It has the same instruction
 ; set as the R65F11 and R65F12 but the memory layout is different.
+
+* Target Machines
+	;; R6501Q microcontroller with built in I/O
+	machine_R6501Q = "R6501Q"
+
+	;;  65C02 cpu with 6551 serial port
+	machine_65C02 = "65C02"
+
+	;; 65C816 emulator with emulated 6551
+	machine_65C816 = "65C816"
+
+	;; 	machine := machine_65C816
+	if machine {
+	  message "Assembling for ", machine
+	} else {
+	  message "Target machine needs to be defined:"
+	  message "   -Dmachine=\"R6501Q\""
+	  message "   -Dmachine=\"65C02\""
+	  message "   -Dmachine=\"65C816\""
+	}
 	
-    	cpu := "R65C02"
+	if machine == machine_R6501Q {
+        cpu := "R6501Q"
+	    stack_base := $00
+	    start_offset := $400
+	} else if machine == machine_65C02 {
+        cpu := "R65C02"
+	    stack_base := $0100
+	    start_offset := $400-$14+$0a
+	} else if machine == machine_65C816 {
+        cpu := "65C816"
+	    stack_base := $0100
+	    start_offset := $400-$14+$0a-$0b-$09+$1d ; Space for extra vectors
+	}
 
 * R6501Q Hardware Registers 	
 
@@ -90,7 +122,12 @@
 	;; Page 1 RAM usage
 
 	;;  For R65F11 and R65F12 the disk registers are at 100-106,
-	;;  for the R6501Q these registers are at E000 and E100.
+	;;  For the R6501Q these registers are at E000 and E100.
+	;;  For 65C02 the stack is in page 1
+
+	;; Page 2 RAM usage
+
+	;; Page 2 is not used
 	
 	;; Page 3 RAM usage - User variables
 	
@@ -114,7 +151,7 @@
 	
 (*
 	Disk controller registers. For the R6501Q the disk registers must be available
-	at both $E000 and $E100.
+	at both $E000 and $E100. This should be fixed.
 *)
     	DSK_STATUS := $e000
         DSK_TRACK := $e101
@@ -127,7 +164,7 @@
 *)
 
     		ORG := $f000
- 			FILL.B $400, $ff
+ 			FILL.B start_offset, $ff
 
 ;; Data table of initial values for registers, used by INIT 
 INITTAB:    DATA.B $80, $03, $c2, $00, $ff, $00, $50, $00,
@@ -252,14 +289,14 @@ L301   		JMP NEXT
 LOOP:       DATA.W LOOP+2
     		STX XSAVE
     		TSX 
-    		INC 1,X
+    		INC stack_base+1,X
     		BNE L311
-    		INC 2,X
+    		INC stack_base+2,X
 L311   		CLC 
-    		LDA 3,X
-    		SBC 1,X
-    		LDA 4,X
-    		SBC 2,X
+    		LDA stack_base+3,X
+    		SBC stack_base+1,X
+    		LDA stack_base+4,X
+    		SBC stack_base+2,X
 L316   		BPL BRAN+2
     		BVS BRAN+2
     		INX 
@@ -284,18 +321,18 @@ PLOOP:      DATA.W PLOOP+2
     		INX 
     		INX 
     		CLC 
-    		ADC 1,X
-    		STA 1,X
+    		ADC stack_base+1,X
+    		STA stack_base+1,X
     		PLA 
-    		ADC 2,X
-    		STA 2,X
+    		ADC stack_base+2,X
+    		STA stack_base+2,X
     		PLA 
     		BPL L311
     		CLC 
-    		LDA 1,X
-    		SBC 3,X
-    		LDA 2,X
-    		SBC 4,X
+    		LDA stack_base+1,X
+    		SBC stack_base+3,X
+    		LDA stack_base+2,X
+    		SBC stack_base+4,X
     		JMP L316
 ;;
 ;;
@@ -316,28 +353,8 @@ POPTWO: 	INX
 POP: 		INX 
     		INX 
     		JMP NEXT
-(*;;
-	;;
-          BMI L234
-          CMP #$A
-          BMI L227
-          SEC
-          SBC #7
-          CMP #$A
-          BMI L234
-L227      CMP 0,X
-          BPL L234
-          STA 2,X
-          LDA #1
-          PHA
-          TYA
-          JMP PUT        ; exit true with converted value
-L234      TYA
-          PHA
-          INX
-          INX
-          JMP PUT        ; exit false with bad conversion
-*)
+;;
+;; 
 ;;
 DIGIT:      DATA.W DIGIT+2
     		SEC 
@@ -480,7 +497,7 @@ XEMIT  		BIT SCSR
 ;;
 KEY:        DATA.W KEY+2
     		JSR L517
-    		JMP PUSHOA
+    		JMP PUSH0A
 L517   		JMP (UKEY)
 L518   		LDA SCSR
     		AND #1
@@ -493,7 +510,7 @@ L518   		LDA SCSR
 QTERM:      DATA.W QTERM+2
     		LDA SCSR
     		AND #1
-    		JMP PUSHOA
+    		JMP PUSH0A
 ;;
 ;;    CR
 ;;
@@ -632,7 +649,7 @@ XOR:        DATA.W XOR+2
 SPAT:     	DATA.W SPAT+2
     		TXA 
 ;
-PUSHOA: 	PHA 
+PUSH0A: 	PHA 
     		LDA #0
     		JMP PUSH
 ;;
@@ -662,7 +679,7 @@ PUSHS:      DATA.W PUSHS+2
     		TSX 
     		TXA 
     		LDX XSAVE
-    		JMP PUSHOA
+    		JMP PUSH0A
 ;;
 ;;
 ;;
@@ -678,10 +695,10 @@ SEMIS:      DATA.W SEMIS+2
 LEAVE:      DATA.W LEAVE+2
     		STX XSAVE
     		TSX 
-    		LDA 1,X
-    		STA 3,X
-    		LDA 2,X
-    		STA 4,X
+    		LDA stack_base+1,X
+    		STA stack_base+3,X
+    		LDA stack_base+2,X
+    		STA stack_base+4,X
     		LDX XSAVE
     		JMP NEXT
 ;;
@@ -710,18 +727,18 @@ RFROM:      DATA.W RFROM+2
 R:          DATA.W R+2
     		STX XSAVE
     		TSX 
-    		LDA 1,X
+    		LDA stack_base+1,X
     		PHA 
-    		LDA 2,X
+    		LDA stack_base+2,X
     		LDX XSAVE
     		JMP PUSH
 ;;
 ;;
 ;;
 ZEQ:        DATA.W ZEQ+2
-    		LDA 0,X
-    		ORA 1,X
+    		LDA 1,X				; Corrected from FIG-Forth
     		STY 1,X
+    		ORA 0,X
     		BNE L760
     		INY 
 L760   		STY 0,X
@@ -863,9 +880,9 @@ PSTORE:     DATA.W PSTORE+2
     		ADC 2,X
     		STA (0,X)
     		INC 0,X
-    		BNE $f827
+    		BNE L868
     		INC 1,X
-    		LDA (0,X)
+L868   		LDA (0,X)
     		ADC 3,X
     		STA (0,X)
     		JMP POPTWO
@@ -919,7 +936,7 @@ CSTOR:      DATA.W CSTOR+2
 ;;
 ;;
 ;; 
-DOCOL: 		LDA IP+1
+DOCOL:      LDA IP+1
     		PHA 
     		LDA IP
     		PHA 
@@ -934,7 +951,7 @@ DOCOL: 		LDA IP+1
 ;;
 ;;
 ;; 
-DOCON: 		LDY #$02
+DOCON:      LDY #$02
     		LDA (W),Y
     		PHA 
     		INY 
@@ -1132,16 +1149,16 @@ ULESS:      DATA.W ULESS+2
 ;;
 ;;
 LESS:       DATA.W LESS+2
-    		LDA 2,X
-    		CMP 0,X
+    		LDA 2,X				; Why no SEC here?
+    		CMP 0,X				; Carry does not need to be cleared
     		LDA 3,X
-    		SBC 1,X
-    		STY 3,X
+    		SBC 1,X				; Subtract
+    		STY 3,X				; Zero high byte
     		BVC L1163
-    		EOR #$80
+    		EOR #$80			; Correct overflow
 L1163  		BPL L1165
-    		INY 
-L1165  		STY 2,X
+    		INY 				; Invert boolean
+L1165  		STY 2,X				; Leave boolean
     		JMP POP
 ;;
 ;;
@@ -1448,10 +1465,14 @@ LTNUMBER:   DATA.W DOCOL
 ;;
 COLD:       DATA.W COLD+2
     		STY CLD_WARM
+
+	if machine == machine_R6501Q {
+
 L1485  		LDX #$ff
     		TXS 
     		CLD 
-    		CLC 
+    		CLC
+			XCE
     		LDA #0
     		STA MCR				; Full address mode
     		LDA #0
@@ -1464,16 +1485,23 @@ L1485  		LDX #$ff
     		LDA #$00
     		STA LCA
     		STA SCSR
-    		STA INTFLAG
+    STA INTFLAG
+
+	} else if machine == machine_65C816 {
+
+L1485		CLC
+			XCE
+	;; ToDo: set up serial, interrupts, display etc.
+	}
     		LDA #$6c
     		STA W-1
     		LDA #<XEMIT
     		STA UEMIT
     		LDA #>XEMIT
     		STA UEMIT+1
-    		LDA #$ae			; Disk
+    		LDA #<XKEY
     		STA UKEY
-    		LDA #$ff
+    		LDA #>XKEY
     		STA UKEY+1
     		LDA #0
     		STA UP
@@ -1502,7 +1530,7 @@ L1515  		LDA #>DSKBOOT
     		LDA #<DSKBOOT
     		STA IP
     		CLI 
-    		LDX #$c2
+    		LDX #$c2		 	; X is parameter (data) stack
     		LDA #$04			; Load $0400 into TOS to start ROM search
     		STA TOS+1
     		LDY #0
@@ -1541,7 +1569,7 @@ L1549  		LDA INITTAB,Y
 ;;
 DSKBOOT:	DATA.W CR
             DATA.W PDOTQ
-    		DATA.B $06, "NO ROM"
+NOROMSTR:	DATA.B $06, "NO ROM"
     		DATA.W CTLRQ
     		DATA.W ZERO
     		DATA.W L2149
@@ -1606,7 +1634,7 @@ DABS:       DATA.W DOCOL
     		DATA.W DPLUS1
     		DATA.W SEMIS
 ;;
-;;
+;;    MIN
 ;;
 MIN:        DATA.W DOCOL
     		DATA.W TWODUP
@@ -1616,7 +1644,10 @@ MIN:        DATA.W DOCOL
     		DATA.W SWAP
     		DATA.W DROP
     		DATA.W SEMIS
-    		DATA.W DOCOL
+;;
+;;    MAX
+;; 
+MAX:	    DATA.W DOCOL
     		DATA.W TWODUP
     		DATA.W LESS
     		DATA.W ZBRAN
@@ -1759,28 +1790,30 @@ SELECT:     DATA.W SELECT+2
     		STA DSK_CTL
     		JMP POP
 ;;
+;; DREAD (addr n --- err )
 ;;
-;;
-DREAD:      DATA.W DREAD+2
-    		JSR L1811
-L1800  		JSR L1817
+;; Reads multiple (4) disk sectors starting at sector 4n + 1 of selected disk,
+;; current track to addr and leaves the disk error byte.
+DREAD*:     DATA.W DREAD+2
+    		JSR CALCSEC
+.RDSEC 		JSR DRSETUP
     		LDA #$90
     		JSR DSTAT
     		JSR L1826
     		AND #$bf
-    		BEQ L1808
+    		BEQ DRDONE
     		DEC N+3
-    		BNE L1800
-L1808  		INX 
-    		INX 
+    		BNE .RDSEC
+DRDONE:		INX 
+    		INX 				
     		JMP L929
-L1811  		ASL 0,X
+CALCSEC:	ASL 0,X				; n := 4n + 1
     		ASL 0,X
     		INC 0,X
     		LDA #5
     		STA N+3
     		RTS 
-L1817  		LDA #4
+DRSETUP:	LDA #4
     		STA N+2
     		LDA 2,X
     		STA N
@@ -1806,17 +1839,17 @@ L1838  		LDA DSK_STATUS
     		BCS L1838
     		ROL A
     		RTS 
-DSTAT: 		STA DSK_STATUS
+DSTAT:		STA DSK_STATUS
     		LDY #8
-L1845  		DEY 
-    		BNE L1845
+.WAILOOP:	DEY 
+    		BNE .WAILOOP
     		RTS 
 ;;
 ;;
 ;;
 DWRITE:     DATA.W DWRITE+2
-    		JSR L1811
-L1853  		JSR L1817
+    		JSR $fd74
+L1853  		JSR $fd7f
     		LDA #$b0
     		JSR DSTAT
     		JSR L1862
@@ -1824,7 +1857,7 @@ L1853  		JSR L1817
     		BEQ L1861
     		DEC N+3
     		BNE L1853
-L1861  		JMP L1808
+L1861  		JMP DRDONE
 L1862  		BIT DSK_CTL
     		BVS L1862
     		BPL L1838
@@ -1879,7 +1912,7 @@ L1903  		STA DSK_TRACK
 ;;
 SPACES:     DATA.W DOCOL
     		DATA.W ZERO
-    		DATA.W $fc6e
+    		DATA.W MAX
     		DATA.W DDUP
     		DATA.W ZBRAN
     		DATA.W $000c
@@ -1935,7 +1968,7 @@ DIG:        DATA.W DOCOL
     		DATA.W ZBRAN
     		DATA.W $0007
     		DATA.W CLIT
-    		DATA.B $07			
+    		DATA.B $07 			
     		DATA.W PLUS
     		DATA.W CLIT
     		DATA.B $30
@@ -2005,6 +2038,9 @@ Q:          DATA.W DOCOL
 ;;
 ;;    EEC! - works only with R65F11 and R65F12
 ;;
+
+	if machine == machine_R6501Q {
+	
 EECSTORE:   DATA.W EECSTORE+2
     		LDY #4
     		LDA 3,X
@@ -2057,6 +2093,64 @@ BANKPOP:    DATA.W BANKPOP+2
     		PLA 
     		STA PortB
     		JMP SEMIS+2
+
+	} else {
+
+	;; Empty words for now
+	
+EECSTORE:   DATA.W EECSTORE+2
+    		LDY #4
+    		LDA 3,X
+L2046  		ROR A
+    		ROR 2,X
+    		DEY 
+    		BNE L2046
+    		LDY 2,X
+    		STY PortD
+    		ROR A
+    		ROR A
+    		PHP 
+    		LSR A
+    		PLP 
+    		ROR A
+    		SEC 
+    		ROR A
+    		STA PortC
+    		LDA #$60
+    		NOP 
+    		NOP 
+    		LDA 4,X
+    NOP
+	NOP
+    		STA PortD
+    		LDA 0,X
+    		STA LCBCLR
+    		LDA 1,X
+    		STA LCB
+	L2071  		NOP
+	NOP
+	NOP
+    NOP
+	NOP
+    		LDA #$e0
+    		NOP 
+    		NOP 
+    		INX 
+    		INX 
+    		JMP POPTWO
+;;
+;;
+;;
+BANKPSH:    DATA.W BANKPSH+2
+    		JMP POP
+;;
+;;
+;;
+BANKPOP:    DATA.W BANKPOP+2
+    		JMP SEMIS+2
+			
+	}
+	
 ;;
 ;;
 ;;
@@ -2103,6 +2197,7 @@ L2134  		LDA #<unkn6
     		JMP W-1
 	
 unkn6:      DATA.W $005d
+
 NMIJMP		JMP ($0042)
 IRQJMP		JMP ($0040)
     		DATA.W OVER
@@ -2124,7 +2219,7 @@ L2157  		DEC TOS
     		BNE L2157
 L2161  		JSR L1836
     		JMP SELECT+2
-    		LDA #0
+XKEY:		LDA #0
     		STA DSK_CTL
     		JMP L518
 ;;
@@ -2168,9 +2263,27 @@ MMON:       DATA.W DOCOL
     		DATA.W EXECUTE
     		DATA.W BRAN
     		DATA.W $ffd6
-	
+
+	if machine == machine_65C816 {
+
+N_COP:		DATA.W COLD+5
+N_BRK:		DATA.W COLD+5
+N_ABORT:	DATA.W COLD+5
+N_NMI:		DATA.W NMIJMP
+			DATA.W $ffff
+N_IRQ:		DATA.W IRQJMP
+			DATA.W $ffff
+			DATA.W $ffff
+E_COP:		DATA.W COLD+5
+			DATA.W $ffff
+E_ABORT:	DATA.W COLD+5
+NMI:     	DATA.W NMIJMP
+RESET:   	DATA.W COLD+5
+IRQ:	    DATA.W IRQJMP
+	} else {
     		DATA.W $ffff		; Padding
 	
 NMI:     	DATA.W NMIJMP
 RESET:   	DATA.W COLD+5
 IRQ:	    DATA.W IRQJMP
+	}

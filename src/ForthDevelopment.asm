@@ -1,2754 +1,5214 @@
-        cpu := "R65C02"
 
+	section "kernel"
+	
+	Include "ForthKernel.asm"
+	message org
+	section "development"
+	
+    org := $c000
 
-        org := $c000
+;;
+;;	The kernel searches for this identifier on every 1k boundary.
+;;
+IDENT:         data.w $a55a
+;;
+;;	Then it starts executing at the address stored next
+;;
+START:          data.w KSTART
+	
+UNKNOWN:        data.w $ffff
+				data.w $ffff
+				data.w $0140
+				data.w $17f8
+				data.w $2000
+				data.w $0000
+				data.w $001f
+				data.w $0000
+				data.w $0404
+				data.w $0411
+				data.w $0000
+				data.w $0000
+				data.w $033c
+				data.w $a081
+				data.w $0404
+				data.w $0000
+				data.w $a081
+				data.w _ENDCODE
+				data.w $0336
+				data.w ABORT
+	
+;;
+;;    LIT
+;;
+_LIT            text.7 $83, "LIT"
+    			data.w 0            ; link to previous. Last link marked by zero.
+    			data.w LIT+2        ; PFAPTR
+;;
+;;    CLIT
+;;
+_CLIT          	text.7 $84, "CLIT"
+    			data.w _LIT         ; link to LIT
+    			data.w CLIT+2       ; PFAPTR
+;;
+;;    EXECUTE
+;;
+_EXECUTE       	text.7 $87, "EXECUTE"
+    			data.w _CLIT    	; link to CLIT
+    			data.w EXECUTE+2    ; PFAPTR
+;;
+;;    BRANCH
+;;
+_BRANCH         text.7 $86, "BRANCH"
+    			data.w _EXECUTE     ; link to EXECUTE
+    			data.w BRAN+2       ; PFAPTR
+;;
+;;    0BRANCH
+;;
+_ZBRANCH        text.7 $87, "0BRANCH"
+                data.w _BRANCH      ; link to BRANCH
+                data.w ZBRAN+2 	    ; PFAPTR
 
-        DSK_STATUS := $e000
-        DSK_TRACK := $e101
-        DSK_SECTOR := $e102
-        DSK_DATA := $e103
-        DSK_CTL := $e106
+;;
+;;    (LOOP)
+;;
+_PLOOP          text.7 $86, "(LOOP)"
+    			data.w _ZBRANCH    ; link to 0BRANCH
+    			data.w LOOP+2      ; PFAPTR
 
+;;
+;;    (+LOOP)
+;;
+_PPLOOP         text.7 $87, "(+LOOP)"
+                data.w _PLOOP    ; link to (LOOP)
+                data.w PLOOP+2    ; PFAPTR
 
-c000: ;;
-c000: ;;
-c000: ;;
-c000: IDENT:         data.w $0000
-c003:                   data.w $0000
-c006:                   data.w $0000
-c009:                   data.w $0000
-c00c:                   data.w $0000
-c00f:                   data.w $0000
-c012:                   data.w $0000
-c015:                   data.w $0000
-c018:                   data.w $0000
-c01b:                   data.w $0000
-c01e:                   data.w $0000
-c021:                   data.w $0000
-c024:                   data.w $0000
-c027:                   data.w $0000
-c02a:                   data.w $0000
-c02d:                   data.w $0000
-c030:                   data.w $0000
-c033:                   data.w $0000
-c036:                   data.w $0000
-c039:                   data.w $0000
-c03c:                   data.w $0000
-c03f:                   data.w $0000
-c042:                   data.w $0000
-c045:                   data.w $0000
-c048:                   data.w $0000
-c04b:                   data.w $0000
-c04e:                   data.w $0000
-c051:                   data.w $0000
-c054: ;;
-c054: ;;    0BRANCH
-c054: ;;
-c054:         data.7 $87, "0BRANCH"
-c05c:         data.w $0000    ; link to previous. Last link marked by zero.
-c05e: c05f:                   data.w $0000
-c062:                   data.w $0000
-c065:                   data.w $0000
-c068:                   data.w $0000
-c06b: ;;
-c06b: ;;    (+LOOP)
-c06b: ;;
-c06b:         data.7 $87, "(+LOOP)"
-c073:         data.w $0000    ; link to 0BRANCH
-c075: c076:                   data.w $0000
-c079:                   data.w $0000
-c07c:                   data.w $0000
-c07f:                   data.w $0000
-c082:                   data.w $0000
-c085:                   data.w $0000
-c088: ;;
-c088: ;;    DIGIT
-c088: ;;
-c088:         data.7 $85, "DIGIT"
-c08e:         data.w $0000    ; link to (+LOOP)
-c090: c091:                   data.w $0000
-c094:                   data.w $0000
-c097:                   data.w $0000
-c09a:                   data.w $0000
-c09d: ;;
-c09d: ;;    ENCLOSE
-c09d: ;;
-c09d:         data.7 $87, "ENCLOSE"
-c0a5:         data.w $0000    ; link to DIGIT
-c0a7: c0a8:                   data.w $0000
-c0ab:                   data.w $0000
-c0ae:                   data.w $0000
-c0b1:                   data.w $0000
-c0b4:                   data.w $0000
-c0b7:                   data.w $0000
-c0ba:                   data.w $0000
-c0bd:                   data.w $0000
-c0c0:                   data.w $0000
-c0c3:                   data.w $0000
-c0c6:                   data.w $0000
-c0c9:                   data.w $0000
-c0cc:                   data.w $0000
-c0cf:                   data.w $0000
-c0d2:                   data.w $0000
-c0d5:                   data.w $0000
-c0d8:                   data.w $0000
-c0db:                   data.w $0000
-c0de:                   data.w $0000
-c0e1:                   data.w $0000
-c0e4:                   data.w $0000
-c0e7:                   data.w $0000
-c0ea:                   data.w $0000
-c0ed:                   data.w $0000
-c0f0:                   data.w $0000
-c0f3:                   data.w $0000
-c0f6:                   data.w $0000
-c0f9:                   data.w $0000
-c0fc:                   data.w $0000
-c0ff:                   data.w $0000
-c102:                   data.w $0000
-c105:                   data.w $0000
-c108:                   data.w $0000
-c10b:                   data.w $0000
-c10e:                   data.w $0000
-c111:                   data.w $0000
-c114:                   data.w $0000
-c117:                   data.w $0000
-c11a:                   data.w $0000
-c11d:                   data.w $0000
-c120:                   data.w $0000
-c123:                   data.w $0000
-c126:                   data.w $0000
-c129:                   data.w $0000
-c12c:                   data.w $0000
-c12f:                   data.w $0000
-c132:                   data.w $0000
-c135:                   data.w $0000
-c138:                   data.w $0000
-c13b:                   data.w $0000
-c13e:                   data.w $0000
-c141:                   data.w $0000
-c144:                   data.w $0000
-c147:                   data.w $0000
-c14a:                   data.w $0000
-c14d:                   data.w $0000
-c150:                   data.w $0000
-c153:                   data.w $0000
-c156:                   data.w $0000
-c159:                   data.w $0000
-c15c:                   data.w $0000
-c15f:                   data.w $0000
-c162:                   data.w $0000
-c165:                   data.w $0000
-c168:                   data.w $0000
-c16b:                   data.w $0000
-c16e:                   data.w $0000
-c171:                   data.w $0000
-c174:                   data.w $0000
-c177:                   data.w $0000
-c17a:                   data.w $0000
-c17d:                   data.w $0000
-c180:                   data.w $0000
-c183:                   data.w $0000
-c186:                   data.w $0000
-c189:                   data.w $0000
-c18c:                   data.w $0000
-c18f:                   data.w $0000
-c192:                   data.w $0000
-c195:                   data.w $0000
-c198:                   data.w $0000
-c19b:                   data.w $0000
-c19e:                   data.w $0000
-c1a1:                   data.w $0000
-c1a4:                   data.w $0000
-c1a7:                   data.w $0000
-c1aa:                   data.w $0000
-c1ad:                   data.w $0000
-c1b0:                   data.w $0000
-c1b3:                   data.w $0000
-c1b6:                   data.w $0000
-c1b9:                   data.w $0000
-c1bc:                   data.w $0000
-c1bf:                   data.w $0000
-c1c2:                   data.w $0000
-c1c5:                   data.w $0000
-c1c8:                   data.w $0000
-c1cb:                   data.w $0000
-c1ce:                   data.w $0000
-c1d1:                   data.w $0000
-c1d4:                   data.w $0000
-c1d7:                   data.w $0000
-c1da:                   data.w $0000
-c1dd:                   data.w $0000
-c1e0:                   data.w $0000
-c1e3:                   data.w $0000
-c1e6:                   data.w $0000
-c1e9:                   data.w $0000
-c1ec:                   data.w $0000
-c1ef:                   data.w $0000
-c1f2:                   data.w $0000
-c1f5:                   data.w $0000
-c1f8:                   data.w $0000
-c1fb:                   data.w $0000
-c1fe:                   data.w $0000
-c201:                   data.w $0000
-c204:                   data.w $0000
-c207:                   data.w $0000
-c20a:                   data.w $0000
-c20d:                   data.w $0000
-c210:                   data.w $0000
-c213:                   data.w $0000
-c216:                   data.w $0000
-c219:                   data.w $0000
-c21c:                   data.w $0000
-c21f:                   data.w $0000
-c222:                   data.w $0000
-c225:                   data.w $0000
-c228:                   data.w $0000
-c22b:                   data.w $0000
-c22e:                   data.w $0000
-c231:                   data.w $0000
-c234:                   data.w $0000
-c237:                   data.w $0000
-c23a:                   data.w $0000
-c23d:                   data.w $0000
-c240:                   data.w $0000
-c243:                   data.w $0000
-c246:                   data.w $0000
-c249:                   data.w $0000
-c24c:                   data.w $0000
-c24f:                   data.w $0000
-c252:                   data.w $0000
-c255:                   data.w $0000
-c258:                   data.w $0000
-c25b:                   data.w $0000
-c25e:                   data.w $0000
-c261:                   data.w $0000
-c264:                   data.w $0000
-c267:                   data.w $0000
-c26a:                   data.w $0000
-c26d:                   data.w $0000
-c270:                   data.w $0000
-c273:                   data.w $0000
-c276:                   data.w $0000
-c279:                   data.w $0000
-c27c:                   data.w $0000
-c27f:                   data.w $0000
-c282:                   data.w $0000
-c285:                   data.w $0000
-c288:                   data.w $0000
-c28b:                   data.w $0000
-c28e:                   data.w $0000
-c291:                   data.w $0000
-c294:                   data.w $0000
-c297:                   data.w $0000
-c29a:                   data.w $0000
-c29d:                   data.w $0000
-c2a0:                   data.w $0000
-c2a3:                   data.w $0000
-c2a6:                   data.w $0000
-c2a9:                   data.w $0000
-c2ac:                   data.w $0000
-c2af:                   data.w $0000
-c2b2:                   data.w $0000
-c2b5:                   data.w $0000
-c2b8:                   data.w $0000
-c2bb:                   data.w $0000
-c2be:                   data.w $0000
-c2c1:                   data.w $0000
-c2c4:                   data.w $0000
-c2c7:                   data.w $0000
-c2ca:                   data.w $0000
-c2cd:                   data.w $0000
-c2d0:                   data.w $0000
-c2d3:                   data.w $0000
-c2d6:                   data.w $0000
-c2d9:                   data.w $0000
-c2dc:                   data.w $0000
-c2df:                   data.w $0000
-c2e2:                   data.w $0000
-c2e5:                   data.w $0000
-c2e8:                   data.w $0000
-c2eb:                   data.w $0000
-c2ee:                   data.w $0000
-c2f1:                   data.w $0000
-c2f4:                   data.w $0000
-c2f7:                   data.w $0000
-c2fa:                   data.w $0000
-c2fd:                   data.w $0000
-c300:                   data.w $0000
-c303:                   data.w $0000
-c306:                   data.w $0000
-c309:                   data.w $0000
-c30c:                   data.w $0000
-c30f:                   data.w $0000
-c312:                   data.w $0000
-c315:                   data.w $0000
-c318:                   data.w $0000
-c31b:                   data.w $0000
-c31e:                   data.w $0000
-c321:                   data.w $0000
-c324:                   data.w $0000
-c327:                   data.w $0000
-c32a:                   data.w $0000
-c32d:                   data.w $0000
-c330:                   data.w $0000
-c333:                   data.w $0000
-c336:                   data.w $0000
-c339:                   data.w $0000
-c33c:                   data.w $0000
-c33f:                   data.w $0000
-c342:                   data.w $0000
-c345:                   data.w $0000
-c348:                   data.w $0000
-c34b:                   data.w $0000
-c34e:                   data.w $0000
-c351:                   data.w $0000
-c354:                   data.w $0000
-c357:                   data.w $0000
-c35a:                   data.w $0000
-c35d:                   data.w $0000
-c360:                   data.w $0000
-c363:                   data.w $0000
-c366:                   data.w $0000
-c369:                   data.w $0000
-c36c:                   data.w $0000
-c36f:                   data.w $0000
-c372:                   data.w $0000
-c375:                   data.w $0000
-c378:                   data.w $0000
-c37b:                   data.w $0000
-c37e:                   data.w $0000
-c381:                   data.w $0000
-c384:                   data.w $0000
-c387:                   data.w $0000
-c38a:                   data.w $0000
-c38d:                   data.w $0000
-c390:                   data.w $0000
-c393:                   data.w $0000
-c396:                   data.w $0000
-c399:                   data.w $0000
-c39c:                   data.w $0000
-c39f:                   data.w $0000
-c3a2:                   data.w $0000
-c3a5:                   data.w $0000
-c3a8:                   data.w $0000
-c3ab:                   data.w $0000
-c3ae:                   data.w $0000
-c3b1:                   data.w $0000
-c3b4:                   data.w $0000
-c3b7:                   data.w $0000
-c3ba:                   data.w $0000
-c3bd:                   data.w $0000
-c3c0:                   data.w $0000
-c3c3:                   data.w $0000
-c3c6:                   data.w $0000
-c3c9:                   data.w $0000
-c3cc:                   data.w $0000
-c3cf:                   data.w $0000
-c3d2:                   data.w $0000
-c3d5:                   data.w $0000
-c3d8:                   data.w $0000
-c3db:                   data.w $0000
-c3de:                   data.w $0000
-c3e1:                   data.w $0000
-c3e4:                   data.w $0000
-c3e7:                   data.w $0000
-c3ea:                   data.w $0000
-c3ed:                   data.w $0000
-c3f0:                   data.w $0000
-c3f3:                   data.w $0000
-c3f6:                   data.w $0000
-c3f9:                   data.w $0000
-c3fc:                   data.w $0000
-c3ff:                   data.w $0000
-c402:                   data.w $0000
-c405:                   data.w $0000
-c408:                   data.w $0000
-c40b:                   data.w $0000
-c40e:                   data.w $0000
-c411:                   data.w $0000
-c414:                   data.w $0000
-c417:                   data.w $0000
-c41a:                   data.w $0000
-c41d:                   data.w $0000
-c420:                   data.w $0000
-c423:                   data.w $0000
-c426:                   data.w $0000
-c429:                   data.w $0000
-c42c:                   data.w $0000
-c42f:                   data.w $0000
-c432:                   data.w $0000
-c435:                   data.w $0000
-c438:                   data.w $0000
-c43b:                   data.w $0000
-c43e:                   data.w $0000
-c441:                   data.w $0000
-c444:                   data.w $0000
-c447:                   data.w $0000
-c44a:                   data.w $0000
-c44d:                   data.w $0000
-c450:                   data.w $0000
-c453:                   data.w $0000
-c456:                   data.w $0000
-c459:                   data.w $0000
-c45c:                   data.w $0000
-c45f:                   data.w $0000
-c462:                   data.w $0000
-c465:                   data.w $0000
-c468:                   data.w $0000
-c46b:                   data.w $0000
-c46e:                   data.w $0000
-c471:                   data.w $0000
-c474:                   data.w $0000
-c477:                   data.w $0000
-c47a:                   data.w $0000
-c47d:                   data.w $0000
-c480:                   data.w $0000
-c483:                   data.w $0000
-c486:                   data.w $0000
-c489:                   data.w $0000
-c48c:                   data.w $0000
-c48f:                   data.w $0000
-c492:                   data.w $0000
-c495:                   data.w $0000
-c498:                   data.w $0000
-c49b:                   data.w $0000
-c49e:                   data.w $0000
-c4a1:                   data.w $0000
-c4a4:                   data.w $0000
-c4a7:                   data.w $0000
-c4aa:                   data.w $0000
-c4ad:                   data.w $0000
-c4b0:                   data.w $0000
-c4b3:                   data.w $0000
-c4b6:                   data.w $0000
-c4b9:                   data.w $0000
-c4bc:                   data.w $0000
-c4bf:                   data.w $0000
-c4c2:                   data.w $0000
-c4c5:                   data.w $0000
-c4c8:                   data.w $0000
-c4cb:                   data.w $0000
-c4ce:                   data.w $0000
-c4d1:                   data.w $0000
-c4d4:                   data.w $0000
-c4d7:                   data.w $0000
-c4da:                   data.w $0000
-c4dd:                   data.w $0000
-c4e0:                   data.w $0000
-c4e3:                   data.w $0000
-c4e6:                   data.w $0000
-c4e9:                   data.w $0000
-c4ec:                   data.w $0000
-c4ef:                   data.w $0000
-c4f2:                   data.w $0000
-c4f5:                   data.w $0000
-c4f8:                   data.w $0000
-c4fb:                   data.w $0000
-c4fe:                   data.w $0000
-c501:                   data.w $0000
-c504:                   data.w $0000
-c507:                   data.w $0000
-c50a:                   data.w $0000
-c50d:                   data.w $0000
-c510:                   data.w $0000
-c513:                   data.w $0000
-c516:                   data.w $0000
-c519:                   data.w $0000
-c51c:                   data.w $0000
-c51f:                   data.w $0000
-c522:                   data.w $0000
-c525:                   data.w $0000
-c528:                   data.w $0000
-c52b:                   data.w $0000
-c52e:                   data.w $0000
-c531:                   data.w $0000
-c534:                   data.w $0000
-c537:                   data.w $0000
-c53a:                   data.w $0000
-c53d:                   data.w $0000
-c540:                   data.w $0000
-c543:                   data.w $0000
-c546:                   data.w $0000
-c549:                   data.w $0000
-c54c:                   data.w $0000
-c54f:                   data.w $0000
-c552:                   data.w $0000
-c555:                   data.w $0000
-c558:                   data.w $0000
-c55b:                   data.w $0000
-c55e:                   data.w $0000
-c561:                   data.w $0000
-c564:                   data.w $0000
-c567:                   data.w $0000
-c56a:                   data.w $0000
-c56d:                   data.w $0000
-c570:                   data.w $0000
-c573:                   data.w $0000
-c576:                   data.w $0000
-c579:                   data.w $0000
-c57c:                   data.w $0000
-c57f:                   data.w $0000
-c582:                   data.w $0000
-c585:                   data.w $0000
-c588:                   data.w $0000
-c58b:                   data.w $0000
-c58e:                   data.w $0000
-c591:                   data.w $0000
-c594:                   data.w $0000
-c597:                   data.w $0000
-c59a:                   data.w $0000
-c59d:                   data.w $0000
-c5a0:                   data.w $0000
-c5a3:                   data.w $0000
-c5a6:                   data.w $0000
-c5a9:                   data.w $0000
-c5ac:                   data.w $0000
-c5af:                   data.w $0000
-c5b2:                   data.w $0000
-c5b5:                   data.w $0000
-c5b8:                   data.w $0000
-c5bb:                   data.w $0000
-c5be:                   data.w $0000
-c5c1:                   data.w $0000
-c5c4:                   data.w $0000
-c5c7:                   data.w $0000
-c5ca:                   data.w $0000
-c5cd:                   data.w $0000
-c5d0:                   data.w $0000
-c5d3:                   data.w $0000
-c5d6:                   data.w $0000
-c5d9:                   data.w $0000
-c5dc:                   data.w $0000
-c5df:                   data.w $0000
-c5e2:                   data.w $0000
-c5e5:                   data.w $0000
-c5e8:                   data.w $0000
-c5eb:                   data.w $0000
-c5ee:                   data.w $0000
-c5f1:                   data.w $0000
-c5f4:                   data.w $0000
-c5f7:                   data.w $0000
-c5fa:                   data.w $0000
-c5fd:                   data.w $0000
-c600:                   data.w $0000
-c603:                   data.w $0000
-c606:                   data.w $0000
-c609:                   data.w $0000
-c60c:                   data.w $0000
-c60f:                   data.w $0000
-c612:                   data.w $0000
-c615:                   data.w $0000
-c618:                   data.w $0000
-c61b:                   data.w $0000
-c61e:                   data.w $0000
-c621:                   data.w $0000
-c624:                   data.w $0000
-c627:                   data.w $0000
-c62a:                   data.w $0000
-c62d:                   data.w $0000
-c630:                   data.w $0000
-c633:                   data.w $0000
-c636:                   data.w $0000
-c639:                   data.w $0000
-c63c:                   data.w $0000
-c63f:                   data.w $0000
-c642:                   data.w $0000
-c645:                   data.w $0000
-c648:                   data.w $0000
-c64b:                   data.w $0000
-c64e:                   data.w $0000
-c651:                   data.w $0000
-c654:                   data.w $0000
-c657:                   data.w $0000
-c65a:                   data.w $0000
-c65d:                   data.w $0000
-c660:                   data.w $0000
-c663:                   data.w $0000
-c666:                   data.w $0000
-c669:                   data.w $0000
-c66c:                   data.w $0000
-c66f:                   data.w $0000
-c672:                   data.w $0000
-c675:                   data.w $0000
-c678:                   data.w $0000
-c67b:                   data.w $0000
-c67e:                   data.w $0000
-c681:                   data.w $0000
-c684:                   data.w $0000
-c687:                   data.w $0000
-c68a:                   data.w $0000
-c68d:                   data.w $0000
-c690:                   data.w $0000
-c693:                   data.w $0000
-c696:                   data.w $0000
-c699:                   data.w $0000
-c69c:                   data.w $0000
-c69f:                   data.w $0000
-c6a2:                   data.w $0000
-c6a5:                   data.w $0000
-c6a8:                   data.w $0000
-c6ab:                   data.w $0000
-c6ae:                   data.w $0000
-c6b1:                   data.w $0000
-c6b4:                   data.w $0000
-c6b7:                   data.w $0000
-c6ba:                   data.w $0000
-c6bd:                   data.w $0000
-c6c0:                   data.w $0000
-c6c3:                   data.w $0000
-c6c6:                   data.w $0000
-c6c9:                   data.w $0000
-c6cc:                   data.w $0000
-c6cf:                   data.w $0000
-c6d2:                   data.w $0000
-c6d5:                   data.w $0000
-c6d8:                   data.w $0000
-c6db:                   data.w $0000
-c6de:                   data.w $0000
-c6e1:                   data.w $0000
-c6e4:                   data.w $0000
-c6e7:                   data.w $0000
-c6ea:                   data.w $0000
-c6ed:                   data.w $0000
-c6f0:                   data.w $0000
-c6f3:                   data.w $0000
-c6f6:                   data.w $0000
-c6f9:                   data.w $0000
-c6fc:                   data.w $0000
-c6ff:                   data.w $0000
-c702:                   data.w $0000
-c705:                   data.w $0000
-c708:                   data.w $0000
-c70b:                   data.w $0000
-c70e:                   data.w $0000
-c711:                   data.w $0000
-c714:                   data.w $0000
-c717:                   data.w $0000
-c71a:                   data.w $0000
-c71d:                   data.w $0000
-c720:                   data.w $0000
-c723:                   data.w $0000
-c726:                   data.w $0000
-c729:                   data.w $0000
-c72c:                   data.w $0000
-c72f:                   data.w $0000
-c732:                   data.w $0000
-c735:                   data.w $0000
-c738:                   data.w $0000
-c73b:                   data.w $0000
-c73e:                   data.w $0000
-c741:                   data.w $0000
-c744:                   data.w $0000
-c747:                   data.w $0000
-c74a:                   data.w $0000
-c74d:                   data.w $0000
-c750:                   data.w $0000
-c753:                   data.w $0000
-c756:                   data.w $0000
-c759:                   data.w $0000
-c75c:                   data.w $0000
-c75f:                   data.w $0000
-c762:                   data.w $0000
-c765:                   data.w $0000
-c768:                   data.w $0000
-c76b:                   data.w $0000
-c76e:                   data.w $0000
-c771:                   data.w $0000
-c774:                   data.w $0000
-c777:                   data.w $0000
-c77a:                   data.w $0000
-c77d:                   data.w $0000
-c780:                   data.w $0000
-c783:                   data.w $0000
-c786:                   data.w $0000
-c789:                   data.w $0000
-c78c:                   data.w $0000
-c78f:                   data.w $0000
-c792:                   data.w $0000
-c795:                   data.w $0000
-c798:                   data.w $0000
-c79b:                   data.w $0000
-c79e:                   data.w $0000
-c7a1:                   data.w $0000
-c7a4:                   data.w $0000
-c7a7:                   data.w $0000
-c7aa:                   data.w $0000
-c7ad:                   data.w $0000
-c7b0:                   data.w $0000
-c7b3:                   data.w $0000
-c7b6:                   data.w $0000
-c7b9:                   data.w $0000
-c7bc:                   data.w $0000
-c7bf:                   data.w $0000
-c7c2:                   data.w $0000
-c7c5:                   data.w $0000
-c7c8:                   data.w $0000
-c7cb:                   data.w $0000
-c7ce:                   data.w $0000
-c7d1:                   data.w $0000
-c7d4:                   data.w $0000
-c7d7:                   data.w $0000
-c7da:                   data.w $0000
-c7dd:                   data.w $0000
-c7e0:                   data.w $0000
-c7e3:                   data.w $0000
-c7e6:                   data.w $0000
-c7e9:                   data.w $0000
-c7ec:                   data.w $0000
-c7ef:                   data.w $0000
-c7f2:                   data.w $0000
-c7f5:                   data.w $0000
-c7f8:                   data.w $0000
-c7fb:                   data.w $0000
-c7fe:                   data.w $0000
-c801:                   data.w $0000
-c804:                   data.w $0000
-c807:                   data.w $0000
-c80a:                   data.w $0000
-c80d:                   data.w $0000
-c810:                   data.w $0000
-c813:                   data.w $0000
-c816:                   data.w $0000
-c819:                   data.w $0000
-c81c:                   data.w $0000
-c81f:                   data.w $0000
-c822:                   data.w $0000
-c825:                   data.w $0000
-c828:                   data.w $0000
-c82b:                   data.w $0000
-c82e:                   data.w $0000
-c831:                   data.w $0000
-c834:                   data.w $0000
-c837:                   data.w $0000
-c83a:                   data.w $0000
-c83d:                   data.w $0000
-c840:                   data.w $0000
-c843:                   data.w $0000
-c846:                   data.w $0000
-c849:                   data.w $0000
-c84c:                   data.w $0000
-c84f:                   data.w $0000
-c852:                   data.w $0000
-c855:                   data.w $0000
-c858:                   data.w $0000
-c85b:                   data.w $0000
-c85e:                   data.w $0000
-c861:                   data.w $0000
-c864:                   data.w $0000
-c867:                   data.w $0000
-c86a:                   data.w $0000
-c86d:                   data.w $0000
-c870:                   data.w $0000
-c873:                   data.w $0000
-c876:                   data.w $0000
-c879:                   data.w $0000
-c87c:                   data.w $0000
-c87f:                   data.w $0000
-c882:                   data.w $0000
-c885:                   data.w $0000
-c888:                   data.w $0000
-c88b:                   data.w $0000
-c88e:                   data.w $0000
-c891:                   data.w $0000
-c894:                   data.w $0000
-c897:                   data.w $0000
-c89a:                   data.w $0000
-c89d:                   data.w $0000
-c8a0:                   data.w $0000
-c8a3:                   data.w $0000
-c8a6:                   data.w $0000
-c8a9:                   data.w $0000
-c8ac:                   data.w $0000
-c8af:                   data.w $0000
-c8b2:                   data.w $0000
-c8b5:                   data.w $0000
-c8b8:                   data.w $0000
-c8bb:                   data.w $0000
-c8be:                   data.w $0000
-c8c1:                   data.w $0000
-c8c4:                   data.w $0000
-c8c7:                   data.w $0000
-c8ca:                   data.w $0000
-c8cd:                   data.w $0000
-c8d0:                   data.w $0000
-c8d3:                   data.w $0000
-c8d6:                   data.w $0000
-c8d9:                   data.w $0000
-c8dc:                   data.w $0000
-c8df:                   data.w $0000
-c8e2:                   data.w $0000
-c8e5:                   data.w $0000
-c8e8:                   data.w $0000
-c8eb:                   data.w $0000
-c8ee:                   data.w $0000
-c8f1:                   data.w $0000
-c8f4:                   data.w $0000
-c8f7:                   data.w $0000
-c8fa:                   data.w $0000
-c8fd:                   data.w $0000
-c900:                   data.w $0000
-c903:                   data.w $0000
-c906:                   data.w $0000
-c909:                   data.w $0000
-c90c:                   data.w $0000
-c90f:                   data.w $0000
-c912:                   data.w $0000
-c915:                   data.w $0000
-c918:                   data.w $0000
-c91b:                   data.w $0000
-c91e:                   data.w $0000
-c921:                   data.w $0000
-c924:                   data.w $0000
-c927:                   data.w $0000
-c92a:                   data.w $0000
-c92d:                   data.w $0000
-c930:                   data.w $0000
-c933:                   data.w $0000
-c936:                   data.w $0000
-c939:                   data.w $0000
-c93c:                   data.w $0000
-c93f:                   data.w $0000
-c942:                   data.w $0000
-c945:                   data.w $0000
-c948:                   data.w $0000
-c94b:                   data.w $0000
-c94e:                   data.w $0000
-c951:                   data.w $0000
-c954:                   data.w $0000
-c957:                   data.w $0000
-c95a:                   data.w $0000
-c95d:                   data.w $0000
-c960:                   data.w $0000
-c963:                   data.w $0000
-c966:                   data.w $0000
-c969:                   data.w $0000
-c96c:                   data.w $0000
-c96f:                   data.w $0000
-c972:                   data.w $0000
-c975:                   data.w $0000
-c978:                   data.w $0000
-c97b:                   data.w $0000
-c97e:                   data.w $0000
-c981:                   data.w $0000
-c984:                   data.w $0000
-c987:                   data.w $0000
-c98a:                   data.w $0000
-c98d:                   data.w $0000
-c990:                   data.w $0000
-c993:                   data.w $0000
-c996:                   data.w $0000
-c999:                   data.w $0000
-c99c:                   data.w $0000
-c99f:                   data.w $0000
-c9a2:                   data.w $0000
-c9a5:                   data.w $0000
-c9a8:                   data.w $0000
-c9ab:                   data.w $0000
-c9ae:                   data.w $0000
-c9b1:                   data.w $0000
-c9b4:                   data.w $0000
-c9b7:                   data.w $0000
-c9ba:                   data.w $0000
-c9bd:                   data.w $0000
-c9c0:                   data.w $0000
-c9c3:                   data.w $0000
-c9c6:                   data.w $0000
-c9c9:                   data.w $0000
-c9cc:                   data.w $0000
-c9cf:                   data.w $0000
-c9d2:                   data.w $0000
-c9d5:                   data.w $0000
-c9d8:                   data.w $0000
-c9db:                   data.w $0000
-c9de:                   data.w $0000
-c9e1:                   data.w $0000
-c9e4:                   data.w $0000
-c9e7:                   data.w $0000
-c9ea:                   data.w $0000
-c9ed:                   data.w $0000
-c9f0:                   data.w $0000
-c9f3:                   data.w $0000
-c9f6:                   data.w $0000
-c9f9:                   data.w $0000
-c9fc:                   data.w $0000
-c9ff:                   data.w $0000
-ca02:                   data.w $0000
-ca05:                   data.w $0000
-ca08:                   data.w $0000
-ca0b:                   data.w $0000
-ca0e:                   data.w $0000
-ca11:                   data.w $0000
-ca14:                   data.w $0000
-ca17:                   data.w $0000
-ca1a:                   data.w $0000
-ca1d:                   data.w $0000
-ca20:                   data.w $0000
-ca23:                   data.w $0000
-ca26:                   data.w $0000
-ca29:                   data.w $0000
-ca2c:                   data.w $0000
-ca2f:                   data.w $0000
-ca32:                   data.w $0000
-ca35:                   data.w $0000
-ca38:                   data.w $0000
-ca3b:                   data.w $0000
-ca3e:                   data.w $0000
-ca41:                   data.w $0000
-ca44:                   data.w $0000
-ca47:                   data.w $0000
-ca4a:                   data.w $0000
-ca4d:                   data.w $0000
-ca50:                   data.w $0000
-ca53:                   data.w $0000
-ca56:                   data.w $0000
-ca59:                   data.w $0000
-ca5c:                   data.w $0000
-ca5f:                   data.w $0000
-ca62:                   data.w $0000
-ca65:                   data.w $0000
-ca68:                   data.w $0000
-ca6b:                   data.w $0000
-ca6e:                   data.w $0000
-ca71:                   data.w $0000
-ca74:                   data.w $0000
-ca77:                   data.w $0000
-ca7a:                   data.w $0000
-ca7d:                   data.w $0000
-ca80:                   data.w $0000
-ca83:                   data.w $0000
-ca86:                   data.w $0000
-ca89:                   data.w $0000
-ca8c:                   data.w $0000
-ca8f:                   data.w $0000
-ca92:                   data.w $0000
-ca95:                   data.w $0000
-ca98:                   data.w $0000
-ca9b:                   data.w $0000
-ca9e:                   data.w $0000
-caa1:                   data.w $0000
-caa4:                   data.w $0000
-caa7:                   data.w $0000
-caaa:                   data.w $0000
-caad:                   data.w $0000
-cab0:                   data.w $0000
-cab3:                   data.w $0000
-cab6:                   data.w $0000
-cab9:                   data.w $0000
-cabc:                   data.w $0000
-cabf:                   data.w $0000
-cac2:                   data.w $0000
-cac5:                   data.w $0000
-cac8:                   data.w $0000
-cacb:                   data.w $0000
-cace:                   data.w $0000
-cad1:                   data.w $0000
-cad4:                   data.w $0000
-cad7:                   data.w $0000
-cada:                   data.w $0000
-cadd:                   data.w $0000
-cae0:                   data.w $0000
-cae3:                   data.w $0000
-cae6:                   data.w $0000
-cae9:                   data.w $0000
-caec:                   data.w $0000
-caef:                   data.w $0000
-caf2:                   data.w $0000
-caf5:                   data.w $0000
-caf8:                   data.w $0000
-cafb:                   data.w $0000
-cafe:                   data.w $0000
-cb01:                   data.w $0000
-cb04:                   data.w $0000
-cb07:                   data.w $0000
-cb0a:                   data.w $0000
-cb0d:                   data.w $0000
-cb10:                   data.w $0000
-cb13:                   data.w $0000
-cb16:                   data.w $0000
-cb19:                   data.w $0000
-cb1c:                   data.w $0000
-cb1f:                   data.w $0000
-cb22:                   data.w $0000
-cb25:                   data.w $0000
-cb28:                   data.w $0000
-cb2b:                   data.w $0000
-cb2e:                   data.w $0000
-cb31:                   data.w $0000
-cb34:                   data.w $0000
-cb37:                   data.w $0000
-cb3a:                   data.w $0000
-cb3d:                   data.w $0000
-cb40:                   data.w $0000
-cb43:                   data.w $0000
-cb46:                   data.w $0000
-cb49:                   data.w $0000
-cb4c:                   data.w $0000
-cb4f:                   data.w $0000
-cb52:                   data.w $0000
-cb55:                   data.w $0000
-cb58:                   data.w $0000
-cb5b:                   data.w $0000
-cb5e:                   data.w $0000
-cb61:                   data.w $0000
-cb64:                   data.w $0000
-cb67:                   data.w $0000
-cb6a:                   data.w $0000
-cb6d:                   data.w $0000
-cb70:                   data.w $0000
-cb73:                   data.w $0000
-cb76:                   data.w $0000
-cb79:                   data.w $0000
-cb7c:                   data.w $0000
-cb7f:                   data.w $0000
-cb82:                   data.w $0000
-cb85:                   data.w $0000
-cb88:                   data.w $0000
-cb8b:                   data.w $0000
-cb8e:                   data.w $0000
-cb91:                   data.w $0000
-cb94:                   data.w $0000
-cb97:                   data.w $0000
-cb9a:                   data.w $0000
-cb9d:                   data.w $0000
-cba0:                   data.w $0000
-cba3:                   data.w $0000
-cba6:                   data.w $0000
-cba9:                   data.w $0000
-cbac:                   data.w $0000
-cbaf:                   data.w $0000
-cbb2:                   data.w $0000
-cbb5:                   data.w $0000
-cbb8:                   data.w $0000
-cbbb:                   data.w $0000
-cbbe:                   data.w $0000
-cbc1:                   data.w $0000
-cbc4:                   data.w $0000
-cbc7:                   data.w $0000
-cbca:                   data.w $0000
-cbcd:                   data.w $0000
-cbd0:                   data.w $0000
-cbd3:                   data.w $0000
-cbd6:                   data.w $0000
-cbd9:                   data.w $0000
-cbdc:                   data.w $0000
-cbdf:                   data.w $0000
-cbe2:                   data.w $0000
-cbe5:                   data.w $0000
-cbe8:                   data.w $0000
-cbeb:                   data.w $0000
-cbee:                   data.w $0000
-cbf1:                   data.w $0000
-cbf4:                   data.w $0000
-cbf7:                   data.w $0000
-cbfa:                   data.w $0000
-cbfd:                   data.w $0000
-cc00:                   data.w $0000
-cc03:                   data.w $0000
-cc06:                   data.w $0000
-cc09:                   data.w $0000
-cc0c:                   data.w $0000
-cc0f:                   data.w $0000
-cc12:                   data.w $0000
-cc15:                   data.w $0000
-cc18:                   data.w $0000
-cc1b:                   data.w $0000
-cc1e:                   data.w $0000
-cc21:                   data.w $0000
-cc24:                   data.w $0000
-cc27:                   data.w $0000
-cc2a:                   data.w $0000
-cc2d:                   data.w $0000
-cc30:                   data.w $0000
-cc33:                   data.w $0000
-cc36:                   data.w $0000
-cc39:                   data.w $0000
-cc3c:                   data.w $0000
-cc3f:                   data.w $0000
-cc42:                   data.w $0000
-cc45:                   data.w $0000
-cc48:                   data.w $0000
-cc4b:                   data.w $0000
-cc4e:                   data.w $0000
-cc51:                   data.w $0000
-cc54:                   data.w $0000
-cc57:                   data.w $0000
-cc5a:                   data.w $0000
-cc5d:                   data.w $0000
-cc60:                   data.w $0000
-cc63:                   data.w $0000
-cc66:                   data.w $0000
-cc69:                   data.w $0000
-cc6c:                   data.w $0000
-cc6f:                   data.w $0000
-cc72:                   data.w $0000
-cc75:                   data.w $0000
-cc78:                   data.w $0000
-cc7b:                   data.w $0000
-cc7e:                   data.w $0000
-cc81:                   data.w $0000
-cc84:                   data.w $0000
-cc87:                   data.w $0000
-cc8a:                   data.w $0000
-cc8d:                   data.w $0000
-cc90:                   data.w $0000
-cc93:                   data.w $0000
-cc96:                   data.w $0000
-cc99:                   data.w $0000
-cc9c:                   data.w $0000
-cc9f:                   data.w $0000
-cca2:                   data.w $0000
-cca5:                   data.w $0000
-cca8:                   data.w $0000
-ccab:                   data.w $0000
-ccae:                   data.w $0000
-ccb1:                   data.w $0000
-ccb4:                   data.w $0000
-ccb7:                   data.w $0000
-ccba:                   data.w $0000
-ccbd:                   data.w $0000
-ccc0:                   data.w $0000
-ccc3:                   data.w $0000
-ccc6:                   data.w $0000
-ccc9:                   data.w $0000
-cccc:                   data.w $0000
-cccf:                   data.w $0000
-ccd2:                   data.w $0000
-ccd5:                   data.w $0000
-ccd8:                   data.w $0000
-ccdb:                   data.w $0000
-ccde:                   data.w $0000
-cce1:                   data.w $0000
-cce4:                   data.w $0000
-cce7:                   data.w $0000
-ccea:                   data.w $0000
-cced:                   data.w $0000
-ccf0:                   data.w $0000
-ccf3:                   data.w $0000
-ccf6:                   data.w $0000
-ccf9:                   data.w $0000
-ccfc:                   data.w $0000
-ccff:                   data.w $0000
-cd02:                   data.w $0000
-cd05:                   data.w $0000
-cd08:                   data.w $0000
-cd0b:                   data.w $0000
-cd0e:                   data.w $0000
-cd11:                   data.w $0000
-cd14:                   data.w $0000
-cd17:                   data.w $0000
-cd1a:                   data.w $0000
-cd1d:                   data.w $0000
-cd20:                   data.w $0000
-cd23:                   data.w $0000
-cd26:                   data.w $0000
-cd29:                   data.w $0000
-cd2c:                   data.w $0000
-cd2f:                   data.w $0000
-cd32:                   data.w $0000
-cd35:                   data.w $0000
-cd38:                   data.w $0000
-cd3b:                   data.w $0000
-cd3e:                   data.w $0000
-cd41:                   data.w $0000
-cd44:                   data.w $0000
-cd47:                   data.w $0000
-cd4a:                   data.w $0000
-cd4d:                   data.w $0000
-cd50:                   data.w $0000
-cd53:                   data.w $0000
-cd56:                   data.w $0000
-cd59:                   data.w $0000
-cd5c:                   data.w $0000
-cd5f:                   data.w $0000
-cd62:                   data.w $0000
-cd65:                   data.w $0000
-cd68:                   data.w $0000
-cd6b:                   data.w $0000
-cd6e:                   data.w $0000
-cd71:                   data.w $0000
-cd74:                   data.w $0000
-cd77:                   data.w $0000
-cd7a:                   data.w $0000
-cd7d:                   data.w $0000
-cd80:                   data.w $0000
-cd83:                   data.w $0000
-cd86:                   data.w $0000
-cd89:                   data.w $0000
-cd8c:                   data.w $0000
-cd8f:                   data.w $0000
-cd92:                   data.w $0000
-cd95:                   data.w $0000
-cd98:                   data.w $0000
-cd9b:                   data.w $0000
-cd9e:                   data.w $0000
-cda1:                   data.w $0000
-cda4:                   data.w $0000
-cda7:                   data.w $0000
-cdaa:                   data.w $0000
-cdad:                   data.w $0000
-cdb0:                   data.w $0000
-cdb3:                   data.w $0000
-cdb6:                   data.w $0000
-cdb9:                   data.w $0000
-cdbc:                   data.w $0000
-cdbf:                   data.w $0000
-cdc2:                   data.w $0000
-cdc5:                   data.w $0000
-cdc8:                   data.w $0000
-cdcb:                   data.w $0000
-cdce:                   data.w $0000
-cdd1:                   data.w $0000
-cdd4:                   data.w $0000
-cdd7:                   data.w $0000
-cdda:                   data.w $0000
-cddd:                   data.w $0000
-cde0:                   data.w $0000
-cde3:                   data.w $0000
-cde6:                   data.w $0000
-cde9:                   data.w $0000
-cdec:                   data.w $0000
-cdef:                   data.w $0000
-cdf2:                   data.w $0000
-cdf5:                   data.w $0000
-cdf8:                   data.w $0000
-cdfb:                   data.w $0000
-cdfe:                   data.w $0000
-ce01:                   data.w $0000
-ce04:                   data.w $0000
-ce07:                   data.w $0000
-ce0a:                   data.w $0000
-ce0d:                   data.w $0000
-ce10:                   data.w $0000
-ce13:                   data.w $0000
-ce16:                   data.w $0000
-ce19:                   data.w $0000
-ce1c:                   data.w $0000
-ce1f:                   data.w $0000
-ce22:                   data.w $0000
-ce25:                   data.w $0000
-ce28:                   data.w $0000
-ce2b:                   data.w $0000
-ce2e:                   data.w $0000
-ce31:                   data.w $0000
-ce34:                   data.w $0000
-ce37:                   data.w $0000
-ce3a:                   data.w $0000
-ce3d:                   data.w $0000
-ce40:                   data.w $0000
-ce43:                   data.w $0000
-ce46:                   data.w $0000
-ce49:                   data.w $0000
-ce4c:                   data.w $0000
-ce4f:                   data.w $0000
-ce52:                   data.w $0000
-ce55:                   data.w $0000
-ce58:                   data.w $0000
-ce5b:                   data.w $0000
-ce5e:                   data.w $0000
-ce61:                   data.w $0000
-ce64:                   data.w $0000
-ce67:                   data.w $0000
-ce6a:                   data.w $0000
-ce6d:                   data.w $0000
-ce70:                   data.w $0000
-ce73:                   data.w $0000
-ce76:                   data.w $0000
-ce79:                   data.w $0000
-ce7c:                   data.w $0000
-ce7f:                   data.w $0000
-ce82:                   data.w $0000
-ce85:                   data.w $0000
-ce88:                   data.w $0000
-ce8b:                   data.w $0000
-ce8e:                   data.w $0000
-ce91:                   data.w $0000
-ce94:                   data.w $0000
-ce97:                   data.w $0000
-ce9a:                   data.w $0000
-ce9d:                   data.w $0000
-cea0:                   data.w $0000
-cea3:                   data.w $0000
-cea6:                   data.w $0000
-cea9:                   data.w $0000
-ceac:                   data.w $0000
-ceaf:                   data.w $0000
-ceb2:                   data.w $0000
-ceb5:                   data.w $0000
-ceb8:                   data.w $0000
-cebb:                   data.w $0000
-cebe:                   data.w $0000
-cec1:                   data.w $0000
-cec4:                   data.w $0000
-cec7:                   data.w $0000
-ceca:                   data.w $0000
-cecd:                   data.w $0000
-ced0:                   data.w $0000
-ced3:                   data.w $0000
-ced6:                   data.w $0000
-ced9:                   data.w $0000
-cedc:                   data.w $0000
-cedf:                   data.w $0000
-cee2:                   data.w $0000
-cee5:                   data.w $0000
-cee8:                   data.w $0000
-ceeb:                   data.w $0000
-ceee:                   data.w $0000
-cef1:                   data.w $0000
-cef4:                   data.w $0000
-cef7:                   data.w $0000
-cefa:                   data.w $0000
-cefd:                   data.w $0000
-cf00:                   data.w $0000
-cf03:                   data.w $0000
-cf06:                   data.w $0000
-cf09:                   data.w $0000
-cf0c:                   data.w $0000
-cf0f:                   data.w $0000
-cf12:                   data.w $0000
-cf15:                   data.w $0000
-cf18:                   data.w $0000
-cf1b:                   data.w $0000
-cf1e:                   data.w $0000
-cf21:                   data.w $0000
-cf24:                   data.w $0000
-cf27:                   data.w $0000
-cf2a:                   data.w $0000
-cf2d:                   data.w $0000
-cf30:                   data.w $0000
-cf33:                   data.w $0000
-cf36:                   data.w $0000
-cf39:                   data.w $0000
-cf3c:                   data.w $0000
-cf3f:                   data.w $0000
-cf42:                   data.w $0000
-cf45:                   data.w $0000
-cf48:                   data.w $0000
-cf4b:                   data.w $0000
-cf4e:                   data.w $0000
-cf51:                   data.w $0000
-cf54:                   data.w $0000
-cf57:                   data.w $0000
-cf5a:                   data.w $0000
-cf5d:                   data.w $0000
-cf60:                   data.w $0000
-cf63:                   data.w $0000
-cf66:                   data.w $0000
-cf69:                   data.w $0000
-cf6c:                   data.w $0000
-cf6f:                   data.w $0000
-cf72:                   data.w $0000
-cf75:                   data.w $0000
-cf78:                   data.w $0000
-cf7b:                   data.w $0000
-cf7e:                   data.w $0000
-cf81:                   data.w $0000
-cf84:                   data.w $0000
-cf87:                   data.w $0000
-cf8a:                   data.w $0000
-cf8d:                   data.w $0000
-cf90:                   data.w $0000
-cf93:                   data.w $0000
-cf96:                   data.w $0000
-cf99:                   data.w $0000
-cf9c:                   data.w $0000
-cf9f:                   data.w $0000
-cfa2:                   data.w $0000
-cfa5:                   data.w $0000
-cfa8:                   data.w $0000
-cfab:                   data.w $0000
-cfae:                   data.w $0000
-cfb1:                   data.w $0000
-cfb4:                   data.w $0000
-cfb7:                   data.w $0000
-cfba:                   data.w $0000
-cfbd:                   data.w $0000
-cfc0:                   data.w $0000
-cfc3:                   data.w $0000
-cfc6:                   data.w $0000
-cfc9:                   data.w $0000
-cfcc:                   data.w $0000
-cfcf:                   data.w $0000
-cfd2:                   data.w $0000
-cfd5:                   data.w $0000
-cfd8:                   data.w $0000
-cfdb:                   data.w $0000
-cfde:                   data.w $0000
-cfe1:                   data.w $0000
-cfe4:                   data.w $0000
-cfe7:                   data.w $0000
-cfea:                   data.w $0000
-cfed:                   data.w $0000
-cff0:                   data.w $0000
-cff3:                   data.w $0000
-cff6:                   data.w $0000
-cff9:                   data.w $0000
-cffc:                   data.w $0000
-cfff:                   data.w $0000
-d002:                   data.w $0000
-d005:                   data.w $0000
-d008:                   data.w $0000
-d00b:                   data.w $0000
-d00e:                   data.w $0000
-d011:                   data.w $0000
-d014:                   data.w $0000
-d017:                   data.w $0000
-d01a:                   data.w $0000
-d01d:                   data.w $0000
-d020:                   data.w $0000
-d023:                   data.w $0000
-d026:                   data.w $0000
-d029:                   data.w $0000
-d02c:                   data.w $0000
-d02f:                   data.w $0000
-d032:                   data.w $0000
-d035:                   data.w $0000
-d038:                   data.w $0000
-d03b:                   data.w $0000
-d03e:                   data.w $0000
-d041:                   data.w $0000
-d044:                   data.w $0000
-d047:                   data.w $0000
-d04a:                   data.w $0000
-d04d:                   data.w $0000
-d050:                   data.w $0000
-d053:                   data.w $0000
-d056:                   data.w $0000
-d059:                   data.w $0000
-d05c:                   data.w $0000
-d05f:                   data.w $0000
-d062:                   data.w $0000
-d065:                   data.w $0000
-d068:                   data.w $0000
-d06b:                   data.w $0000
-d06e:                   data.w $0000
-d071:                   data.w $0000
-d074:                   data.w $0000
-d077:                   data.w $0000
-d07a:                   data.w $0000
-d07d:                   data.w $0000
-d080:                   data.w $0000
-d083:                   data.w $0000
-d086:                   data.w $0000
-d089:                   data.w $0000
-d08c:                   data.w $0000
-d08f:                   data.w $0000
-d092:                   data.w $0000
-d095:                   data.w $0000
-d098:                   data.w $0000
-d09b:                   data.w $0000
-d09e:                   data.w $0000
-d0a1:                   data.w $0000
-d0a4:                   data.w $0000
-d0a7:                   data.w $0000
-d0aa:                   data.w $0000
-d0ad:                   data.w $0000
-d0b0:                   data.w $0000
-d0b3:                   data.w $0000
-d0b6:                   data.w $0000
-d0b9:                   data.w $0000
-d0bc:                   data.w $0000
-d0bf:                   data.w $0000
-d0c2:                   data.w $0000
-d0c5:                   data.w $0000
-d0c8:                   data.w $0000
-d0cb:                   data.w $0000
-d0ce:                   data.w $0000
-d0d1:                   data.w $0000
-d0d4:                   data.w $0000
-d0d7:                   data.w $0000
-d0da:                   data.w $0000
-d0dd:                   data.w $0000
-d0e0:                   data.w $0000
-d0e3:                   data.w $0000
-d0e6:                   data.w $0000
-d0e9:                   data.w $0000
-d0ec:                   data.w $0000
-d0ef:                   data.w $0000
-d0f2:                   data.w $0000
-d0f5:                   data.w $0000
-d0f8:                   data.w $0000
-d0fb:                   data.w $0000
-d0fe:                   data.w $0000
-d101:                   data.w $0000
-d104:                   data.w $0000
-d107:                   data.w $0000
-d10a:                   data.w $0000
-d10d:                   data.w $0000
-d110:                   data.w $0000
-d113:                   data.w $0000
-d116:                   data.w $0000
-d119:                   data.w $0000
-d11c:                   data.w $0000
-d11f:                   data.w $0000
-d122:                   data.w $0000
-d125:                   data.w $0000
-d128:                   data.w $0000
-d12b:                   data.w $0000
-d12e:                   data.w $0000
-d131:                   data.w $0000
-d134:                   data.w $0000
-d137:                   data.w $0000
-d13a:                   data.w $0000
-d13d:                   data.w $0000
-d140:                   data.w $0000
-d143:                   data.w $0000
-d146:                   data.w $0000
-d149:                   data.w $0000
-d14c:                   data.w $0000
-d14f:                   data.w $0000
-d152:                   data.w $0000
-d155:                   data.w $0000
-d158:                   data.w $0000
-d15b:                   data.w $0000
-d15e:                   data.w $0000
-d161:                   data.w $0000
-d164:                   data.w $0000
-d167:                   data.w $0000
-d16a:                   data.w $0000
-d16d:                   data.w $0000
-d170:                   data.w $0000
-d173:                   data.w $0000
-d176:                   data.w $0000
-d179:                   data.w $0000
-d17c:                   data.w $0000
-d17f:                   data.w $0000
-d182:                   data.w $0000
-d185:                   data.w $0000
-d188:                   data.w $0000
-d18b:                   data.w $0000
-d18e:                   data.w $0000
-d191:                   data.w $0000
-d194:                   data.w $0000
-d197:                   data.w $0000
-d19a:                   data.w $0000
-d19d:                   data.w $0000
-d1a0:                   data.w $0000
-d1a3:                   data.w $0000
-d1a6:                   data.w $0000
-d1a9:                   data.w $0000
-d1ac:                   data.w $0000
-d1af:                   data.w $0000
-d1b2:                   data.w $0000
-d1b5:                   data.w $0000
-d1b8:                   data.w $0000
-d1bb:                   data.w $0000
-d1be:                   data.w $0000
-d1c1:                   data.w $0000
-d1c4:                   data.w $0000
-d1c7:                   data.w $0000
-d1ca:                   data.w $0000
-d1cd:                   data.w $0000
-d1d0:                   data.w $0000
-d1d3:                   data.w $0000
-d1d6:                   data.w $0000
-d1d9:                   data.w $0000
-d1dc:                   data.w $0000
-d1df:                   data.w $0000
-d1e2:                   data.w $0000
-d1e5:                   data.w $0000
-d1e8:                   data.w $0000
-d1eb:                   data.w $0000
-d1ee:                   data.w $0000
-d1f1:                   data.w $0000
-d1f4:                   data.w $0000
-d1f7:                   data.w $0000
-d1fa:                   data.w $0000
-d1fd:                   data.w $0000
-d200:                   data.w $0000
-d203:                   data.w $0000
-d206:                   data.w $0000
-d209:                   data.w $0000
-d20c:                   data.w $0000
-d20f:                   data.w $0000
-d212:                   data.w $0000
-d215:                   data.w $0000
-d218:                   data.w $0000
-d21b:                   data.w $0000
-d21e:                   data.w $0000
-d221:                   data.w $0000
-d224:                   data.w $0000
-d227:                   data.w $0000
-d22a:                   data.w $0000
-d22d:                   data.w $0000
-d230:                   data.w $0000
-d233:                   data.w $0000
-d236:                   data.w $0000
-d239:                   data.w $0000
-d23c:                   data.w $0000
-d23f:                   data.w $0000
-d242:                   data.w $0000
-d245:                   data.w $0000
-d248:                   data.w $0000
-d24b:                   data.w $0000
-d24e:                   data.w $0000
-d251:                   data.w $0000
-d254:                   data.w $0000
-d257:                   data.w $0000
-d25a:                   data.w $0000
-d25d:                   data.w $0000
-d260:                   data.w $0000
-d263:                   data.w $0000
-d266:                   data.w $0000
-d269:                   data.w $0000
-d26c:                   data.w $0000
-d26f:                   data.w $0000
-d272:                   data.w $0000
-d275:                   data.w $0000
-d278:                   data.w $0000
-d27b:                   data.w $0000
-d27e:                   data.w $0000
-d281:                   data.w $0000
-d284:                   data.w $0000
-d287:                   data.w $0000
-d28a:                   data.w $0000
-d28d:                   data.w $0000
-d290:                   data.w $0000
-d293:                   data.w $0000
-d296:                   data.w $0000
-d299:                   data.w $0000
-d29c:                   data.w $0000
-d29f:                   data.w $0000
-d2a2:                   data.w $0000
-d2a5:                   data.w $0000
-d2a8:                   data.w $0000
-d2ab:                   data.w $0000
-d2ae:                   data.w $0000
-d2b1:                   data.w $0000
-d2b4:                   data.w $0000
-d2b7:                   data.w $0000
-d2ba:                   data.w $0000
-d2bd:                   data.w $0000
-d2c0:                   data.w $0000
-d2c3:                   data.w $0000
-d2c6:                   data.w $0000
-d2c9:                   data.w $0000
-d2cc:                   data.w $0000
-d2cf:                   data.w $0000
-d2d2:                   data.w $0000
-d2d5:                   data.w $0000
-d2d8:                   data.w $0000
-d2db:                   data.w $0000
-d2de:                   data.w $0000
-d2e1:                   data.w $0000
-d2e4:                   data.w $0000
-d2e7:                   data.w $0000
-d2ea:                   data.w $0000
-d2ed:                   data.w $0000
-d2f0:                   data.w $0000
-d2f3:                   data.w $0000
-d2f6:                   data.w $0000
-d2f9:                   data.w $0000
-d2fc:                   data.w $0000
-d2ff:                   data.w $0000
-d302:                   data.w $0000
-d305:                   data.w $0000
-d308:                   data.w $0000
-d30b:                   data.w $0000
-d30e:                   data.w $0000
-d311:                   data.w $0000
-d314:                   data.w $0000
-d317:                   data.w $0000
-d31a:                   data.w $0000
-d31d:                   data.w $0000
-d320:                   data.w $0000
-d323:                   data.w $0000
-d326:                   data.w $0000
-d329:                   data.w $0000
-d32c:                   data.w $0000
-d32f:                   data.w $0000
-d332:                   data.w $0000
-d335:                   data.w $0000
-d338:                   data.w $0000
-d33b:                   data.w $0000
-d33e:                   data.w $0000
-d341:                   data.w $0000
-d344:                   data.w $0000
-d347:                   data.w $0000
-d34a:                   data.w $0000
-d34d:                   data.w $0000
-d350:                   data.w $0000
-d353:                   data.w $0000
-d356:                   data.w $0000
-d359:                   data.w $0000
-d35c:                   data.w $0000
-d35f:                   data.w $0000
-d362:                   data.w $0000
-d365:                   data.w $0000
-d368:                   data.w $0000
-d36b:                   data.w $0000
-d36e:                   data.w $0000
-d371:                   data.w $0000
-d374:                   data.w $0000
-d377:                   data.w $0000
-d37a:                   data.w $0000
-d37d:                   data.w $0000
-d380:                   data.w $0000
-d383:                   data.w $0000
-d386:                   data.w $0000
-d389:                   data.w $0000
-d38c:                   data.w $0000
-d38f:                   data.w $0000
-d392:                   data.w $0000
-d395:                   data.w $0000
-d398:                   data.w $0000
-d39b:                   data.w $0000
-d39e:                   data.w $0000
-d3a1:                   data.w $0000
-d3a4:                   data.w $0000
-d3a7:                   data.w $0000
-d3aa:                   data.w $0000
-d3ad:                   data.w $0000
-d3b0:                   data.w $0000
-d3b3:                   data.w $0000
-d3b6:                   data.w $0000
-d3b9:                   data.w $0000
-d3bc:                   data.w $0000
-d3bf:                   data.w $0000
-d3c2:                   data.w $0000
-d3c5:                   data.w $0000
-d3c8:                   data.w $0000
-d3cb:                   data.w $0000
-d3ce:                   data.w $0000
-d3d1:                   data.w $0000
-d3d4:                   data.w $0000
-d3d7:                   data.w $0000
-d3da:                   data.w $0000
-d3dd:                   data.w $0000
-d3e0:                   data.w $0000
-d3e3:                   data.w $0000
-d3e6:                   data.w $0000
-d3e9:                   data.w $0000
-d3ec:                   data.w $0000
-d3ef:                   data.w $0000
-d3f2:                   data.w $0000
-d3f5:                   data.w $0000
-d3f8:                   data.w $0000
-d3fb:                   data.w $0000
-d3fe:                   data.w $0000
-d401:                   data.w $0000
-d404:                   data.w $0000
-d407:                   data.w $0000
-d40a:                   data.w $0000
-d40d:                   data.w $0000
-d410:                   data.w $0000
-d413:                   data.w $0000
-d416:                   data.w $0000
-d419:                   data.w $0000
-d41c:                   data.w $0000
-d41f:                   data.w $0000
-d422:                   data.w $0000
-d425:                   data.w $0000
-d428:                   data.w $0000
-d42b:                   data.w $0000
-d42e:                   data.w $0000
-d431:                   data.w $0000
-d434:                   data.w $0000
-d437:                   data.w $0000
-d43a:                   data.w $0000
-d43d:                   data.w $0000
-d440:                   data.w $0000
-d443:                   data.w $0000
-d446:                   data.w $0000
-d449:                   data.w $0000
-d44c:                   data.w $0000
-d44f:                   data.w $0000
-d452:                   data.w $0000
-d455:                   data.w $0000
-d458:                   data.w $0000
-d45b:                   data.w $0000
-d45e:                   data.w $0000
-d461:                   data.w $0000
-d464:                   data.w $0000
-d467:                   data.w $0000
-d46a:                   data.w $0000
-d46d:                   data.w $0000
-d470:                   data.w $0000
-d473:                   data.w $0000
-d476:                   data.w $0000
-d479:                   data.w $0000
-d47c:                   data.w $0000
-d47f:                   data.w $0000
-d482:                   data.w $0000
-d485:                   data.w $0000
-d488:                   data.w $0000
-d48b:                   data.w $0000
-d48e:                   data.w $0000
-d491:                   data.w $0000
-d494:                   data.w $0000
-d497:                   data.w $0000
-d49a:                   data.w $0000
-d49d:                   data.w $0000
-d4a0:                   data.w $0000
-d4a3:                   data.w $0000
-d4a6:                   data.w $0000
-d4a9:                   data.w $0000
-d4ac:                   data.w $0000
-d4af:                   data.w $0000
-d4b2:                   data.w $0000
-d4b5:                   data.w $0000
-d4b8:                   data.w $0000
-d4bb:                   data.w $0000
-d4be:                   data.w $0000
-d4c1:                   data.w $0000
-d4c4:                   data.w $0000
-d4c7:                   data.w $0000
-d4ca:                   data.w $0000
-d4cd:                   data.w $0000
-d4d0:                   data.w $0000
-d4d3:                   data.w $0000
-d4d6:                   data.w $0000
-d4d9:                   data.w $0000
-d4dc:                   data.w $0000
-d4df:                   data.w $0000
-d4e2:                   data.w $0000
-d4e5:                   data.w $0000
-d4e8:                   data.w $0000
-d4eb:                   data.w $0000
-d4ee:                   data.w $0000
-d4f1:                   data.w $0000
-d4f4:                   data.w $0000
-d4f7:                   data.w $0000
-d4fa:                   data.w $0000
-d4fd:                   data.w $0000
-d500:                   data.w $0000
-d503:                   data.w $0000
-d506:                   data.w $0000
-d509:                   data.w $0000
-d50c:                   data.w $0000
-d50f:                   data.w $0000
-d512:                   data.w $0000
-d515:                   data.w $0000
-d518:                   data.w $0000
-d51b:                   data.w $0000
-d51e:                   data.w $0000
-d521:                   data.w $0000
-d524:                   data.w $0000
-d527:                   data.w $0000
-d52a:                   data.w $0000
-d52d:                   data.w $0000
-d530:                   data.w $0000
-d533:                   data.w $0000
-d536:                   data.w $0000
-d539:                   data.w $0000
-d53c:                   data.w $0000
-d53f:                   data.w $0000
-d542:                   data.w $0000
-d545:                   data.w $0000
-d548:                   data.w $0000
-d54b:                   data.w $0000
-d54e:                   data.w $0000
-d551:                   data.w $0000
-d554:                   data.w $0000
-d557:                   data.w $0000
-d55a:                   data.w $0000
-d55d:                   data.w $0000
-d560:                   data.w $0000
-d563:                   data.w $0000
-d566:                   data.w $0000
-d569:                   data.w $0000
-d56c:                   data.w $0000
-d56f:                   data.w $0000
-d572:                   data.w $0000
-d575:                   data.w $0000
-d578:                   data.w $0000
-d57b:                   data.w $0000
-d57e:                   data.w $0000
-d581:                   data.w $0000
-d584:                   data.w $0000
-d587:                   data.w $0000
-d58a:                   data.w $0000
-d58d:                   data.w $0000
-d590:                   data.w $0000
-d593:                   data.w $0000
-d596:                   data.w $0000
-d599:                   data.w $0000
-d59c:                   data.w $0000
-d59f:                   data.w $0000
-d5a2:                   data.w $0000
-d5a5:                   data.w $0000
-d5a8:                   data.w $0000
-d5ab:                   data.w $0000
-d5ae:                   data.w $0000
-d5b1:                   data.w $0000
-d5b4:                   data.w $0000
-d5b7:                   data.w $0000
-d5ba:                   data.w $0000
-d5bd:                   data.w $0000
-d5c0:                   data.w $0000
-d5c3:                   data.w $0000
-d5c6:                   data.w $0000
-d5c9:                   data.w $0000
-d5cc:                   data.w $0000
-d5cf:                   data.w $0000
-d5d2:                   data.w $0000
-d5d5:                   data.w $0000
-d5d8:                   data.w $0000
-d5db:                   data.w $0000
-d5de:                   data.w $0000
-d5e1:                   data.w $0000
-d5e4:                   data.w $0000
-d5e7:                   data.w $0000
-d5ea:                   data.w $0000
-d5ed:                   data.w $0000
-d5f0:                   data.w $0000
-d5f3:                   data.w $0000
-d5f6:                   data.w $0000
-d5f9:                   data.w $0000
-d5fc:                   data.w $0000
-d5ff:                   data.w $0000
-d602:                   data.w $0000
-d605:                   data.w $0000
-d608:                   data.w $0000
-d60b:                   data.w $0000
-d60e:                   data.w $0000
-d611:                   data.w $0000
-d614:                   data.w $0000
-d617:                   data.w $0000
-d61a:                   data.w $0000
-d61d:                   data.w $0000
-d620:                   data.w $0000
-d623:                   data.w $0000
-d626:                   data.w $0000
-d629:                   data.w $0000
-d62c:                   data.w $0000
-d62f:                   data.w $0000
-d632:                   data.w $0000
-d635:                   data.w $0000
-d638:                   data.w $0000
-d63b:                   data.w $0000
-d63e:                   data.w $0000
-d641:                   data.w $0000
-d644:                   data.w $0000
-d647:                   data.w $0000
-d64a:                   data.w $0000
-d64d:                   data.w $0000
-d650:                   data.w $0000
-d653:                   data.w $0000
-d656:                   data.w $0000
-d659:                   data.w $0000
-d65c:                   data.w $0000
-d65f:                   data.w $0000
-d662:                   data.w $0000
-d665:                   data.w $0000
-d668:                   data.w $0000
-d66b:                   data.w $0000
-d66e:                   data.w $0000
-d671:                   data.w $0000
-d674:                   data.w $0000
-d677:                   data.w $0000
-d67a:                   data.w $0000
-d67d:                   data.w $0000
-d680:                   data.w $0000
-d683:                   data.w $0000
-d686:                   data.w $0000
-d689:                   data.w $0000
-d68c:                   data.w $0000
-d68f:                   data.w $0000
-d692:                   data.w $0000
-d695:                   data.w $0000
-d698:                   data.w $0000
-d69b:                   data.w $0000
-d69e:                   data.w $0000
-d6a1:                   data.w $0000
-d6a4:                   data.w $0000
-d6a7:                   data.w $0000
-d6aa:                   data.w $0000
-d6ad:                   data.w $0000
-d6b0:                   data.w $0000
-d6b3:                   data.w $0000
-d6b6:                   data.w $0000
-d6b9:                   data.w $0000
-d6bc:                   data.w $0000
-d6bf:                   data.w $0000
-d6c2:                   data.w $0000
-d6c5:                   data.w $0000
-d6c8:                   data.w $0000
-d6cb:                   data.w $0000
-d6ce:                   data.w $0000
-d6d1:                   data.w $0000
-d6d4:                   data.w $0000
-d6d7:                   data.w $0000
-d6da:                   data.w $0000
-d6dd:                   data.w $0000
-d6e0:                   data.w $0000
-d6e3:                   data.w $0000
-d6e6:                   data.w $0000
-d6e9:                   data.w $0000
-d6ec:                   data.w $0000
-d6ef:                   data.w $0000
-d6f2:                   data.w $0000
-d6f5:                   data.w $0000
-d6f8:                   data.w $0000
-d6fb:                   data.w $0000
-d6fe:                   data.w $0000
-d701:                   data.w $0000
-d704:                   data.w $0000
-d707:                   data.w $0000
-d70a:                   data.w $0000
-d70d:                   data.w $0000
-d710:                   data.w $0000
-d713:                   data.w $0000
-d716:                   data.w $0000
-d719:                   data.w $0000
-d71c:                   data.w $0000
-d71f:                   data.w $0000
-d722:                   data.w $0000
-d725:                   data.w $0000
-d728:                   data.w $0000
-d72b:                   data.w $0000
-d72e:                   data.w $0000
-d731:                   data.w $0000
-d734:                   data.w $0000
-d737:                   data.w $0000
-d73a:                   data.w $0000
-d73d:                   data.w $0000
-d740:                   data.w $0000
-d743:                   data.w $0000
-d746:                   data.w $0000
-d749:                   data.w $0000
-d74c:                   data.w $0000
-d74f:                   data.w $0000
-d752:                   data.w $0000
-d755:                   data.w $0000
-d758:                   data.w $0000
-d75b:                   data.w $0000
-d75e:                   data.w $0000
-d761:                   data.w $0000
-d764:                   data.w $0000
-d767:                   data.w $0000
-d76a:                   data.w $0000
-d76d:                   data.w $0000
-d770:                   data.w $0000
-d773:                   data.w $0000
-d776:                   data.w $0000
-d779:                   data.w $0000
-d77c:                   data.w $0000
-d77f:                   data.w $0000
-d782:                   data.w $0000
-d785:                   data.w $0000
-d788:                   data.w $0000
-d78b:                   data.w $0000
-d78e:                   data.w $0000
-d791:                   data.w $0000
-d794:                   data.w $0000
-d797:                   data.w $0000
-d79a:                   data.w $0000
-d79d:                   data.w $0000
-d7a0:                   data.w $0000
-d7a3:                   data.w $0000
-d7a6:                   data.w $0000
-d7a9:                   data.w $0000
-d7ac:                   data.w $0000
-d7af:                   data.w $0000
-d7b2:                   data.w $0000
-d7b5:                   data.w $0000
-d7b8:                   data.w $0000
-d7bb:                   data.w $0000
-d7be:                   data.w $0000
-d7c1:                   data.w $0000
-d7c4:                   data.w $0000
-d7c7:                   data.w $0000
-d7ca:                   data.w $0000
-d7cd:                   data.w $0000
-d7d0:                   data.w $0000
-d7d3:                   data.w $0000
-d7d6:                   data.w $0000
-d7d9:                   data.w $0000
-d7dc:                   data.w $0000
-d7df:                   data.w $0000
-d7e2:                   data.w $0000
-d7e5:                   data.w $0000
-d7e8:                   data.w $0000
-d7eb:                   data.w $0000
-d7ee:                   data.w $0000
-d7f1:                   data.w $0000
-d7f4:                   data.w $0000
-d7f7:                   data.w $0000
-d7fa:                   data.w $0000
-d7fd:                   data.w $0000
-d800:                   data.w $0000
-d803:                   data.w $0000
-d806:                   data.w $0000
-d809:                   data.w $0000
-d80c:                   data.w $0000
-d80f:                   data.w $0000
-d812:                   data.w $0000
-d815:                   data.w $0000
-d818:                   data.w $0000
-d81b:                   data.w $0000
-d81e:                   data.w $0000
-d821:                   data.w $0000
-d824:                   data.w $0000
-d827:                   data.w $0000
-d82a:                   data.w $0000
-d82d:                   data.w $0000
-d830:                   data.w $0000
-d833:                   data.w $0000
-d836:                   data.w $0000
-d839:                   data.w $0000
-d83c:                   data.w $0000
-d83f:                   data.w $0000
-d842:                   data.w $0000
-d845:                   data.w $0000
-d848:                   data.w $0000
-d84b:                   data.w $0000
-d84e:                   data.w $0000
-d851:                   data.w $0000
-d854:                   data.w $0000
-d857:                   data.w $0000
-d85a:                   data.w $0000
-d85d:                   data.w $0000
-d860:                   data.w $0000
-d863:                   data.w $0000
-d866:                   data.w $0000
-d869:                   data.w $0000
-d86c:                   data.w $0000
-d86f:                   data.w $0000
-d872:                   data.w $0000
-d875:                   data.w $0000
-d878:                   data.w $0000
-d87b:                   data.w $0000
-d87e:                   data.w $0000
-d881:                   data.w $0000
-d884:                   data.w $0000
-d887:                   data.w $0000
-d88a:                   data.w $0000
-d88d:                   data.w $0000
-d890:                   data.w $0000
-d893:                   data.w $0000
-d896:                   data.w $0000
-d899:                   data.w $0000
-d89c:                   data.w $0000
-d89f:                   data.w $0000
-d8a2:                   data.w $0000
-d8a5:                   data.w $0000
-d8a8:                   data.w $0000
-d8ab:                   data.w $0000
-d8ae:                   data.w $0000
-d8b1:                   data.w $0000
-d8b4:                   data.w $0000
-d8b7:                   data.w $0000
-d8ba:                   data.w $0000
-d8bd:                   data.w $0000
-d8c0:                   data.w $0000
-d8c3:                   data.w $0000
-d8c6:                   data.w $0000
-d8c9:                   data.w $0000
-d8cc:                   data.w $0000
-d8cf:                   data.w $0000
-d8d2:                   data.w $0000
-d8d5:                   data.w $0000
-d8d8:                   data.w $0000
-d8db:                   data.w $0000
-d8de:                   data.w $0000
-d8e1:                   data.w $0000
-d8e4:                   data.w $0000
-d8e7:                   data.w $0000
-d8ea:                   data.w $0000
-d8ed:                   data.w $0000
-d8f0:                   data.w $0000
-d8f3:                   data.w $0000
-d8f6:                   data.w $0000
-d8f9:                   data.w $0000
-d8fc:                   data.w $0000
-d8ff:                   data.w $0000
-d902:                   data.w $0000
-d905:                   data.w $0000
-d908:                   data.w $0000
-d90b:                   data.w $0000
-d90e:                   data.w $0000
-d911:                   data.w $0000
-d914:                   data.w $0000
-d917:                   data.w $0000
-d91a:                   data.w $0000
-d91d:                   data.w $0000
-d920:                   data.w $0000
-d923:                   data.w $0000
-d926:                   data.w $0000
-d929:                   data.w $0000
-d92c:                   data.w $0000
-d92f:                   data.w $0000
-d932:                   data.w $0000
-d935:                   data.w $0000
-d938:                   data.w $0000
-d93b:                   data.w $0000
-d93e:                   data.w $0000
-d941:                   data.w $0000
-d944:                   data.w $0000
-d947:                   data.w $0000
-d94a:                   data.w $0000
-d94d:                   data.w $0000
-d950:                   data.w $0000
-d953:                   data.w $0000
-d956:                   data.w $0000
-d959:                   data.w $0000
-d95c:                   data.w $0000
-d95f:                   data.w $0000
-d962:                   data.w $0000
-d965:                   data.w $0000
-d968:                   data.w $0000
-d96b:                   data.w $0000
-d96e:                   data.w $0000
-d971:                   data.w $0000
-d974:                   data.w $0000
-d977:                   data.w $0000
-d97a:                   data.w $0000
-d97d:                   data.w $0000
-d980:                   data.w $0000
-d983:                   data.w $0000
-d986:                   data.w $0000
-d989:                   data.w $0000
-d98c:                   data.w $0000
-d98f:                   data.w $0000
-d992:                   data.w $0000
-d995:                   data.w $0000
-d998:                   data.w $0000
-d99b:                   data.w $0000
-d99e:                   data.w $0000
-d9a1:                   data.w $0000
-d9a4:                   data.w $0000
-d9a7:                   data.w $0000
-d9aa:                   data.w $0000
-d9ad:                   data.w $0000
-d9b0:                   data.w $0000
-d9b3:                   data.w $0000
-d9b6:                   data.w $0000
-d9b9:                   data.w $0000
-d9bc:                   data.w $0000
-d9bf:                   data.w $0000
-d9c2:                   data.w $0000
-d9c5:                   data.w $0000
-d9c8:                   data.w $0000
-d9cb:                   data.w $0000
-d9ce:                   data.w $0000
-d9d1:                   data.w $0000
-d9d4:                   data.w $0000
-d9d7:                   data.w $0000
-d9da:                   data.w $0000
-d9dd:                   data.w $0000
-d9e0:                   data.w $0000
-d9e3:                   data.w $0000
-d9e6:                   data.w $0000
-d9e9:                   data.w $0000
-d9ec:                   data.w $0000
-d9ef:                   data.w $0000
-d9f2:                   data.w $0000
-d9f5:                   data.w $0000
-d9f8:                   data.w $0000
-d9fb:                   data.w $0000
-d9fe:                   data.w $0000
-da01:                   data.w $0000
-da04:                   data.w $0000
-da07:                   data.w $0000
-da0a:                   data.w $0000
-da0d:                   data.w $0000
-da10:                   data.w $0000
-da13:                   data.w $0000
-da16:                   data.w $0000
-da19:                   data.w $0000
-da1c:                   data.w $0000
-da1f:                   data.w $0000
-da22:                   data.w $0000
-da25:                   data.w $0000
-da28:                   data.w $0000
-da2b:                   data.w $0000
-da2e:                   data.w $0000
-da31:                   data.w $0000
-da34:                   data.w $0000
-da37:                   data.w $0000
-da3a:                   data.w $0000
-da3d:                   data.w $0000
-da40:                   data.w $0000
-da43:                   data.w $0000
-da46:                   data.w $0000
-da49:                   data.w $0000
-da4c:                   data.w $0000
-da4f:                   data.w $0000
-da52:                   data.w $0000
-da55:                   data.w $0000
-da58:                   data.w $0000
-da5b:                   data.w $0000
-da5e:                   data.w $0000
-da61:                   data.w $0000
-da64:                   data.w $0000
-da67:                   data.w $0000
-da6a:                   data.w $0000
-da6d:                   data.w $0000
-da70:                   data.w $0000
-da73:                   data.w $0000
-da76:                   data.w $0000
-da79:                   data.w $0000
-da7c:                   data.w $0000
-da7f:                   data.w $0000
-da82:                   data.w $0000
-da85:                   data.w $0000
-da88:                   data.w $0000
-da8b:                   data.w $0000
-da8e:                   data.w $0000
-da91:                   data.w $0000
-da94:                   data.w $0000
-da97:                   data.w $0000
-da9a:                   data.w $0000
-da9d:                   data.w $0000
-daa0:                   data.w $0000
-daa3:                   data.w $0000
-daa6:                   data.w $0000
-daa9:                   data.w $0000
-daac:                   data.w $0000
-daaf:                   data.w $0000
-dab2:                   data.w $0000
-dab5:                   data.w $0000
-dab8:                   data.w $0000
-dabb:                   data.w $0000
-dabe:                   data.w $0000
-dac1:                   data.w $0000
-dac4:                   data.w $0000
-dac7:                   data.w $0000
-daca:                   data.w $0000
-dacd:                   data.w $0000
-dad0:                   data.w $0000
-dad3:                   data.w $0000
-dad6:                   data.w $0000
-dad9:                   data.w $0000
-dadc:                   data.w $0000
-dadf:                   data.w $0000
-dae2:                   data.w $0000
-dae5:                   data.w $0000
-dae8:                   data.w $0000
-daeb:                   data.w $0000
-daee:                   data.w $0000
-daf1:                   data.w $0000
-daf4:                   data.w $0000
-daf7:                   data.w $0000
-dafa:                   data.w $0000
-dafd:                   data.w $0000
-db00:                   data.w $0000
-db03:                   data.w $0000
-db06:                   data.w $0000
-db09:                   data.w $0000
-db0c:                   data.w $0000
-db0f:                   data.w $0000
-db12:                   data.w $0000
-db15:                   data.w $0000
-db18:                   data.w $0000
-db1b:                   data.w $0000
-db1e:                   data.w $0000
-db21:                   data.w $0000
-db24:                   data.w $0000
-db27:                   data.w $0000
-db2a:                   data.w $0000
-db2d:                   data.w $0000
-db30:                   data.w $0000
-db33:                   data.w $0000
-db36:                   data.w $0000
-db39:                   data.w $0000
-db3c:                   data.w $0000
-db3f:                   data.w $0000
-db42:                   data.w $0000
-db45:                   data.w $0000
-db48:                   data.w $0000
-db4b:                   data.w $0000
-db4e:                   data.w $0000
-db51:                   data.w $0000
-db54:                   data.w $0000
-db57:                   data.w $0000
-db5a:                   data.w $0000
-db5d:                   data.w $0000
-db60:                   data.w $0000
-db63:                   data.w $0000
-db66:                   data.w $0000
-db69:                   data.w $0000
-db6c:                   data.w $0000
-db6f:                   data.w $0000
-db72:                   data.w $0000
-db75:                   data.w $0000
-db78:                   data.w $0000
-db7b:                   data.w $0000
-db7e:                   data.w $0000
-db81:                   data.w $0000
-db84:                   data.w $0000
-db87:                   data.w $0000
-db8a:                   data.w $0000
-db8d:                   data.w $0000
-db90:                   data.w $0000
-db93:                   data.w $0000
-db96:                   data.w $0000
-db99:                   data.w $0000
-db9c:                   data.w $0000
-db9f:                   data.w $0000
-dba2:                   data.w $0000
-dba5:                   data.w $0000
-dba8:                   data.w $0000
-dbab:                   data.w $0000
-dbae:                   data.w $0000
-dbb1:                   data.w $0000
-dbb4:                   data.w $0000
-dbb7:                   data.w $0000
-dbba:                   data.w $0000
-dbbd:                   data.w $0000
-dbc0:                   data.w $0000
-dbc3:                   data.w $0000
-dbc6:                   data.w $0000
-dbc9:                   data.w $0000
-dbcc:                   data.w $0000
-dbcf:                   data.w $0000
-dbd2:                   data.w $0000
-dbd5:                   data.w $0000
-dbd8:                   data.w $0000
-dbdb:                   data.w $0000
-dbde:                   data.w $0000
-dbe1:                   data.w $0000
-dbe4:                   data.w $0000
-dbe7:                   data.w $0000
-dbea:                   data.w $0000
-dbed:                   data.w $0000
-dbf0:                   data.w $0000
-dbf3:                   data.w $0000
-dbf6:                   data.w $0000
-dbf9:                   data.w $0000
-dbfc:                   data.w $0000
-dbff:                   data.w $0000
-dc02:                   data.w $0000
-dc05:                   data.w $0000
-dc08:                   data.w $0000
-dc0b:                   data.w $0000
-dc0e:                   data.w $0000
-dc11:                   data.w $0000
-dc14:                   data.w $0000
-dc17:                   data.w $0000
-dc1a:                   data.w $0000
-dc1d:                   data.w $0000
-dc20:                   data.w $0000
-dc23:                   data.w $0000
-dc26:                   data.w $0000
-dc29:                   data.w $0000
-dc2c:                   data.w $0000
-dc2f:                   data.w $0000
-dc32:                   data.w $0000
-dc35:                   data.w $0000
-dc38:                   data.w $0000
-dc3b:                   data.w $0000
-dc3e:                   data.w $0000
-dc41:                   data.w $0000
-dc44:                   data.w $0000
-dc47:                   data.w $0000
-dc4a:                   data.w $0000
-dc4d:                   data.w $0000
-dc50:                   data.w $0000
-dc53:                   data.w $0000
-dc56:                   data.w $0000
-dc59:                   data.w $0000
-dc5c:                   data.w $0000
-dc5f:                   data.w $0000
-dc62:                   data.w $0000
-dc65:                   data.w $0000
-dc68:                   data.w $0000
-dc6b:                   data.w $0000
-dc6e:                   data.w $0000
-dc71:                   data.w $0000
-dc74:                   data.w $0000
-dc77:                   data.w $0000
-dc7a:                   data.w $0000
-dc7d:                   data.w $0000
-dc80:                   data.w $0000
-dc83:                   data.w $0000
-dc86:                   data.w $0000
-dc89:                   data.w $0000
-dc8c:                   data.w $0000
-dc8f:                   data.w $0000
-dc92:                   data.w $0000
-dc95:                   data.w $0000
-dc98:                   data.w $0000
-dc9b:                   data.w $0000
-dc9e:                   data.w $0000
-dca1:                   data.w $0000
-dca4:                   data.w $0000
-dca7:                   data.w $0000
-dcaa:                   data.w $0000
-dcad:                   data.w $0000
-dcb0:                   data.w $0000
-dcb3:                   data.w $0000
-dcb6:                   data.w $0000
-dcb9:                   data.w $0000
-dcbc:                   data.w $0000
-dcbf:                   data.w $0000
-dcc2:                   data.w $0000
-dcc5:                   data.w $0000
-dcc8:                   data.w $0000
-dccb:                   data.w $0000
-dcce:                   data.w $0000
-dcd1:                   data.w $0000
-dcd4:                   data.w $0000
-dcd7:                   data.w $0000
-dcda:                   data.w $0000
-dcdd:                   data.w $0000
-dce0:                   data.w $0000
-dce3:                   data.w $0000
-dce6:                   data.w $0000
-dce9:                   data.w $0000
-dcec:                   data.w $0000
-dcef:                   data.w $0000
-dcf2:                   data.w $0000
-dcf5:                   data.w $0000
-dcf8:                   data.w $0000
-dcfb:                   data.w $0000
-dcfe:                   data.w $0000
-dd01:                   data.w $0000
-dd04:                   data.w $0000
-dd07:                   data.w $0000
-dd0a:                   data.w $0000
-dd0d:                   data.w $0000
-dd10:                   data.w $0000
-dd13:                   data.w $0000
-dd16:                   data.w $0000
-dd19:                   data.w $0000
-dd1c:                   data.w $0000
-dd1f:                   data.w $0000
-dd22:                   data.w $0000
-dd25:                   data.w $0000
-dd28:                   data.w $0000
-dd2b:                   data.w $0000
-dd2e:                   data.w $0000
-dd31:                   data.w $0000
-dd34:                   data.w $0000
-dd37:                   data.w $0000
-dd3a:                   data.w $0000
-dd3d:                   data.w $0000
-dd40:                   data.w $0000
-dd43:                   data.w $0000
-dd46:                   data.w $0000
-dd49:                   data.w $0000
-dd4c:                   data.w $0000
-dd4f:                   data.w $0000
-dd52:                   data.w $0000
-dd55:                   data.w $0000
-dd58:                   data.w $0000
-dd5b:                   data.w $0000
-dd5e:                   data.w $0000
-dd61:                   data.w $0000
-dd64:                   data.w $0000
-dd67:                   data.w $0000
-dd6a:                   data.w $0000
-dd6d:                   data.w $0000
-dd70:                   data.w $0000
-dd73:                   data.w $0000
-dd76:                   data.w $0000
-dd79:                   data.w $0000
-dd7c:                   data.w $0000
-dd7f:                   data.w $0000
-dd82:                   data.w $0000
-dd85:                   data.w $0000
-dd88:                   data.w $0000
-dd8b:                   data.w $0000
-dd8e:                   data.w $0000
-dd91:                   data.w $0000
-dd94:                   data.w $0000
-dd97:                   data.w $0000
-dd9a:                   data.w $0000
-dd9d:                   data.w $0000
-dda0:                   data.w $0000
-dda3:                   data.w $0000
-dda6:                   data.w $0000
-dda9:                   data.w $0000
-ddac:                   data.w $0000
-ddaf:                   data.w $0000
-ddb2:                   data.w $0000
-ddb5:                   data.w $0000
-ddb8:                   data.w $0000
-ddbb:                   data.w $0000
-ddbe:                   data.w $0000
-ddc1:                   data.w $0000
-ddc4:                   data.w $0000
-ddc7:                   data.w $0000
-ddca:                   data.w $0000
-ddcd:                   data.w $0000
-ddd0:                   data.w $0000
-ddd3:                   data.w $0000
-ddd6:                   data.w $0000
-ddd9:                   data.w $0000
-dddc:                   data.w $0000
-dddf:                   data.w $0000
-dde2:                   data.w $0000
-dde5:                   data.w $0000
-dde8:                   data.w $0000
-ddeb:                   data.w $0000
-ddee:                   data.w $0000
-ddf1:                   data.w $0000
-ddf4:                   data.w $0000
-ddf7:                   data.w $0000
-ddfa:                   data.w $0000
-ddfd:                   data.w $0000
-de00:                   data.w $0000
-de03:                   data.w $0000
-de06:                   data.w $0000
-de09:                   data.w $0000
-de0c:                   data.w $0000
-de0f:                   data.w $0000
-de12:                   data.w $0000
-de15:                   data.w $0000
-de18:                   data.w $0000
-de1b:                   data.w $0000
-de1e:                   data.w $0000
-de21:                   data.w $0000
-de24:                   data.w $0000
-de27:                   data.w $0000
-de2a:                   data.w $0000
-de2d:                   data.w $0000
-de30:                   data.w $0000
-de33:                   data.w $0000
-de36:                   data.w $0000
-de39:                   data.w $0000
-de3c:                   data.w $0000
-de3f:                   data.w $0000
-de42:                   data.w $0000
-de45:                   data.w $0000
-de48:                   data.w $0000
-de4b:                   data.w $0000
-de4e:                   data.w $0000
-de51:                   data.w $0000
-de54:                   data.w $0000
-de57:                   data.w $0000
-de5a:                   data.w $0000
-de5d:                   data.w $0000
-de60:                   data.w $0000
-de63:                   data.w $0000
-de66:                   data.w $0000
-de69:                   data.w $0000
-de6c:                   data.w $0000
-de6f:                   data.w $0000
-de72:                   data.w $0000
-de75:                   data.w $0000
-de78:                   data.w $0000
-de7b:                   data.w $0000
-de7e:                   data.w $0000
-de81:                   data.w $0000
-de84:                   data.w $0000
-de87:                   data.w $0000
-de8a:                   data.w $0000
-de8d:                   data.w $0000
-de90:                   data.w $0000
-de93:                   data.w $0000
-de96:                   data.w $0000
-de99:                   data.w $0000
-de9c:                   data.w $0000
-de9f:                   data.w $0000
-dea2:                   data.w $0000
-dea5:                   data.w $0000
-dea8:                   data.w $0000
-deab:                   data.w $0000
-deae:                   data.w $0000
-deb1:                   data.w $0000
-deb4:                   data.w $0000
-deb7:                   data.w $0000
-deba:                   data.w $0000
-debd:                   data.w $0000
-dec0:                   data.w $0000
-dec3:                   data.w $0000
-dec6:                   data.w $0000
-dec9:                   data.w $0000
-decc:                   data.w $0000
-decf:                   data.w $0000
-ded2:                   data.w $0000
-ded5:                   data.w $0000
-ded8:                   data.w $0000
-dedb:                   data.w $0000
-dede:                   data.w $0000
-dee1:                   data.w $0000
-dee4:                   data.w $0000
-dee7:                   data.w $0000
-deea:                   data.w $0000
-deed:                   data.w $0000
-def0:                   data.w $0000
-def3:                   data.w $0000
-def6:                   data.w $0000
-def9:                   data.w $0000
-defc:                   data.w $0000
-deff:                   data.w $0000
-df02:                   data.w $0000
-df05:                   data.w $0000
-df08:                   data.w $0000
-df0b:                   data.w $0000
-df0e:                   data.w $0000
-df11:                   data.w $0000
-df14:                   data.w $0000
-df17:                   data.w $0000
-df1a:                   data.w $0000
-df1d:                   data.w $0000
-df20:                   data.w $0000
-df23:                   data.w $0000
-df26:                   data.w $0000
-df29:                   data.w $0000
-df2c:                   data.w $0000
-df2f:                   data.w $0000
-df32:                   data.w $0000
-df35:                   data.w $0000
-df38:                   data.w $0000
-df3b:                   data.w $0000
-df3e:                   data.w $0000
-df41:                   data.w $0000
-df44:                   data.w $0000
-df47:                   data.w $0000
-df4a:                   data.w $0000
-df4d:                   data.w $0000
-df50:                   data.w $0000
-df53:                   data.w $0000
-df56:                   data.w $0000
-df59:                   data.w $0000
-df5c:                   data.w $0000
-df5f:                   data.w $0000
-df62:                   data.w $0000
-df65:                   data.w $0000
-df68:                   data.w $0000
-df6b:                   data.w $0000
-df6e:                   data.w $0000
-df71:                   data.w $0000
-df74:                   data.w $0000
-df77:                   data.w $0000
-df7a:                   data.w $0000
-df7d:                   data.w $0000
-df80:                   data.w $0000
-df83:                   data.w $0000
-df86:                   data.w $0000
-df89:                   data.w $0000
-df8c:                   data.w $0000
-df8f:                   data.w $0000
-df92:                   data.w $0000
-df95:                   data.w $0000
-df98:                   data.w $0000
-df9b:                   data.w $0000
-df9e:                   data.w $0000
-dfa1:                   data.w $0000
-dfa4:                   data.w $0000
-dfa7:                   data.w $0000
-dfaa:                   data.w $0000
-dfad:                   data.w $0000
-dfb0:                   data.w $0000
-dfb3:                   data.w $0000
-dfb6:                   data.w $0000
-dfb9:                   data.w $0000
-dfbc:                   data.w $0000
-dfbf:                   data.w $0000
-dfc2:                   data.w $0000
-dfc5:                   data.w $0000
-dfc8:                   data.w $0000
-dfcb:                   data.w $0000
-dfce:                   data.w $0000
-dfd1:                   data.w $0000
-dfd4:                   data.w $0000
-dfd7:                   data.w $0000
-dfda:                   data.w $0000
-dfdd:                   data.w $0000
-dfe0:                   data.w $0000
-dfe3:                   data.w $0000
-dfe6:                   data.w $0000
-dfe9:                   data.w $0000
-dfec:                   data.w $0000
-dfef:                   data.w $0000
-dff2:                   data.w $0000
-dff5:                   data.w $0000
-dff8:                   data.w $0000
-dffb:                   data.w $0000
-dffe:                   data.w $0000
-EOF
-IndX: 0 IndY: 0
+;;
+;;    (DO)
+;;
+_PDO            text.7 $84, "(DO)"
+                data.w _PPLOOP    ; link to (+LOOP)
+                data.w DO+2    ; PFAPTR
+
+;;
+;;    I
+;;
+_I             	text.7 $81, "I"
+                data.w _PDO    ; link to (DO)
+                data.w _DIGIT    ; PFAPTR
+I:				data.w R+2
+
+;;
+;;    DIGIT
+;;
+_DIGIT       	text.7 $85, "DIGIT"
+                data.w _I    ; link to I
+                data.w DIGIT+2    ; PFAPTR
+;;
+;;    (FIND)
+;;
+_PFIND          text.7 $86, "(FIND)"
+                data.w _DIGIT    ; link to DIGIT
+                data.w FIND+2    ; PFAPTR
+;;
+;;    ENCLOSE
+;;
+_ENCLOSE        text.7 $87, "ENCLOSE"
+                data.w _PFIND    ; link to (FIND)
+                data.w ENCLOSE+2    ; PFAPTR
+;;
+;;    EMIT
+;;
+_EMIT           text.7 $84, "EMIT"
+                data.w _ENCLOSE    ; link to ENCLOSE
+                data.w EMIT+2    ; PFAPTR
+;;
+;;    KEY
+;;
+_KEY            text.7 $83, "KEY"
+                data.w _EMIT    ; link to EMIT
+                data.w KEY+2    ; PFAPTR
+;;
+;;    ?TERMINAL
+;;
+_QTERMINAL      text.7 $89, "?TERMINAL"
+                data.w _KEY    ; link to KEY
+                data.w QTERM+2    ; PFAPTR
+;;
+;;    CR
+;;
+_CR             text.7 $82, "CR"
+                data.w _QTERMINAL    ; link to ?TERMINAL
+                data.w CR+2    ; PFAPTR
+;;
+;;    XON
+;;
+_XON            text.7 $83, "XON"
+                data.w _CR    ; link to CR
+                data.w XON+2    ; PFAPTR
+;;
+;;
+;;
+XON:  	      	data.w DOCOL
+    			data.w PDOTQ
+    			data.b $01, ""
+    			data.w SEMIS
+;;
+;;    XOFF
+;;
+_XOFF           text.7 $84, "XOFF"
+                data.w _XON    ; link to XON
+                data.w XOFF+2    ; PFAPTR
+;;
+;;
+;;
+XOFF:         	data.w DOCOL
+                data.w PDOTQ
+                data.b $01, ""
+                data.w SEMIS
+;;
+;;    SOURCE
+;;
+_SOURCE         text.7 $86, "SOURCE"
+                data.w _XOFF    ; link to XOFF
+                data.w SOURCE+2    ; PFAPTR
+;;
+;;
+;;
+SOURCE:         data.w DOCOL
+    			data.w ZERO
+    			data.w BLK
+    			data.w STORE
+    			data.w LBRAC
+    			data.w RPSTO
+    			data.w XON
+    			data.w ZERO
+    			data.w IN
+    			data.w STORE
+    			data.w TIB
+    			data.w AT
+    			data.w CLIT
+    			data.b $50
+    			data.w BOUNDS
+    			data.w DO
+    			data.w KEY
+    			data.w DUP
+    			data.w CLIT
+    			data.b $0d
+    			data.w EQUAL
+    			data.w ZBRAN
+    			data.w $0008
+    			data.w DROP
+    			data.w ZERO
+    			data.w LEAVE
+    			data.w I
+    			data.w CSTOR
+    			data.w LOOP
+    			data.w $ffe7
+    			data.w XOFF
+    			data.w INTERPRET
+    			data.w BRAN
+    			data.w $ffca
+;;
+;;    FINIS
+;;
+_FINIS          text.7 $85, "FINIS"
+                data.w _SOURCE    ; link to SOURCE
+                data.w FINIS+2    ; PFAPTR
+;;
+;;
+;;
+FINIS:         	data.w DOCOL
+    			data.w CR
+    			data.w PDOTQ
+    			data.b $02, "OK"
+    			data.w BRAN
+L225   			data.w L1684-L225 
+;;
+;;    CMOVE
+;;
+_CMOVE          text.7 $85, "CMOVE"
+                data.w _FINIS    ; link to FINIS
+    			data.w CMOVE+2    ; PFAPTR
+;;
+;;    U*
+;;
+_UMUL           text.7 $82, "U*"
+                data.w _CMOVE    ; link to CMOVE
+                data.w USTAR+2    ; PFAPTR
+;;
+;;    U/
+;;
+_UDIV           text.7 $82, "U/"
+                data.w _UMUL    ; link to U*
+                data.w USLAS+2    ; PFAPTR
+;;
+;;    AND
+;;
+_AND            text.7 $83, "AND"
+                data.w _UDIV    ; link to U/
+                data.w ANDD+2    ; PFAPTR
+;;
+;;    OR
+;;
+_OR             text.7 $82, "OR"
+                data.w _AND    ; link to AND
+                data.w OR+2    ; PFAPTR
+;;
+;;    XOR
+;;
+_XOR            text.7 $83, "XOR"
+                data.w _OR    ; link to OR
+                data.w XOR+2    ; PFAPTR
+;;
+;;    SP@
+;;
+_SPAT           text.7 $83, "SP@"
+                data.w _XOR    ; link to XOR
+                data.w SPAT+2    ; PFAPTR
+;;
+;;    SP!
+;;
+_SPSTOR         text.7 $83, "SP!"
+                data.w _SPAT    ; link to SP@
+                data.w SPSTO+2    ; PFAPTR
+;;
+;;    RP!
+;;
+_RPSTOR         text.7 $83, "RP!"
+                data.w _SPSTOR    ; link to SP!
+                data.w RPSTO+2    ; PFAPTR
+;;
+;;    RP@
+;;
+_RPAT           text.7 $83, "RP@"
+                data.w _RPSTOR    ; link to RP!
+                data.w PUSHS+2    ; PFAPTR
+;;
+;;    ;S
+;;
+_SEMIS          text.7 $82, ";S"
+                data.w _RPAT    ; link to RP@
+                data.w SEMIS+2    ; PFAPTR
+;;
+;;    LEAVE
+;;
+_LEAVE          text.7 $85, "LEAVE"
+                data.w _SEMIS    ; link to ;S
+                data.w LEAVE+2    ; PFAPTR
+;;
+;;    >R
+;;
+_GTR            text.7 $82, ">R"
+                data.w _LEAVE    ; link to LEAVE
+                data.w GTR+2    ; PFAPTR
+;;
+;;    R>
+;;
+_RGT            text.7 $82, "R>"
+                data.w _GTR    ; link to >R
+                data.w RFROM+2    ; PFAPTR
+;;
+;;    R
+;;
+_R              text.7 $81, "R"
+                data.w _RGT    ; link to R>
+                data.w R+2    ; PFAPTR
+;;
+;;    0=
+;;
+_ZEQ            text.7 $82, "0="
+                data.w _R    ; link to R
+                data.w ZEQ+2    ; PFAPTR
+;;
+;;    NOT
+;;
+_NOT            text.7 $83, "NOT"
+                data.w _ZEQ    ; link to 0=
+                data.w _ZLT    ; PFAPTR
+                data.w ZEQ+2
+;;
+;;    0<
+;;
+_ZLT            text.7 $82, "0<"
+                data.w _NOT    ; link to NOT
+                data.w ZLT+2    ; PFAPTR
+;;
+;;    +
+;;
+_PLUS           text.7 $81, "+"
+                data.w _ZLT    ; link to 0<
+                data.w PLUS+2    ; PFAPTR
+;;
+;;    D+
+;;
+_DPLUS          text.7 $82, "D+"
+                data.w _PLUS    ; link to +
+                data.w DPLUS+2    ; PFAPTR
+;;
+;;    NEGATE
+;;
+_NEGATE         text.7 $86, "NEGATE"
+                data.w _DPLUS    ; link to D+
+                data.w NEGATE+2    ; PFAPTR
+;;
+;;    DNEGATE
+;;
+_DNEGATE        text.7 $87, "DNEGATE"
+                data.w _NEGATE    ; link to NEGATE
+                data.w DNEGATE+2    ; PFAPTR
+;;
+;;    OVER
+;;
+_OVER           text.7 $84, "OVER"
+                data.w _DNEGATE    ; link to DNEGATE
+                data.w OVER+2    ; PFAPTR
+;;
+;;    DROP
+;;
+_DROP           text.7 $84, "DROP"
+                data.w _OVER    ; link to OVER
+                data.w TWODROP    ; PFAPTR
+;;
+;;    2DROP
+;;
+_TWODROP        text.7 $85, "2DROP"
+                data.w _DROP    ; link to DROP
+                data.w SWAP    ; PFAPTR
+;;
+;;    SWAP
+;;
+_SWAP           text.7 $84, "SWAP"
+                data.w _TWODROP    ; link to 2DROP
+                data.w SWAP+2    ; PFAPTR
+;;
+;;    DUP
+;;
+_DUP            text.7 $83, "DUP"
+                data.w _SWAP    ; link to SWAP
+                data.w DUP+2    ; PFAPTR
+;;
+;;    2DUP
+;;
+_TWODUP         text.7 $84, "2DUP"
+                data.w _DUP    ; link to DUP
+                data.w TWODUP+2    ; PFAPTR
+;;
+;;    BOUNDS
+;;
+_BOUNDS         text.7 $86, "BOUNDS"
+                data.w _TWODUP    ; link to 2DUP
+                data.w BOUNDS+2    ; PFAPTR
+;;
+;;    +!
+;;
+_PLUSSTOR       text.7 $82, "+!"
+                data.w _BOUNDS    ; link to BOUNDS
+                data.w PSTORE+2    ; PFAPTR
+;;
+;;    TOGGLE
+;;
+_TOGGLE         text.7 $86, "TOGGLE"
+                data.w _PLUSSTOR    ; link to +!
+                data.w TOGGL+2    ; PFAPTR
+;;
+;;    @
+;;
+_AT             text.7 $81, "@"
+                data.w _TOGGLE    ; link to TOGGLE
+                data.w AT+2    ; PFAPTR
+;;
+;;    C@
+;;
+_CAT            text.7 $82, "C@"
+                data.w _AT    ; link to @
+                data.w CAT+2    ; PFAPTR
+;;
+;;    !
+;;
+_STOR           text.7 $81, "!"
+                data.w _CAT    ; link to C@
+                data.w STORE+2    ; PFAPTR
+;;
+;;    C!
+;;
+_CSTOR          text.7 $82, "C!"
+                data.w _STOR    ; link to !
+                data.w CSTOR+2    ; PFAPTR
+;;
+;; ToDo: Not sure what this one is?
+;;
+DCSTOR:         data.w DOCOL
+                data.w LATEST
+                data.w PFAPTR
+                data.w CFA
+                data.w STORE
+                data.w RFROM
+                data.w DROP
+                data.w SEMIS
+;;
+;;    :
+;;
+_COLON          text.7 $c1, ":"
+                data.w _CSTOR    ; link to C!
+                data.w COLON+2    ; PFAPTR
+;;
+;;
+;;
+COLON:          data.w DOCOL
+                data.w QEXEC
+                data.w STORCSP
+                data.w CURRENT
+                data.w AT
+                data.w CONTEXT
+                data.w STORE
+                data.w CREATE
+                data.w RBRAC
+                data.w LIT
+                data.w DOCOL
+                data.w DCSTOR
+
+;;
+;;    ;
+;;
+_SEMI           text.7 $c1, ";"
+                data.w _COLON    ; link to :
+                data.w DSEMI+2    ; PFAPTR
+
+DSEMI:			data.w DOCOL
+                data.w QCSP
+                data.w COMPILE
+                data.w SEMIS
+                data.w SMUDGE
+                data.w LBRAC
+                data.w SEMIS
+
+;;
+;;    CONSTANT
+;;
+_CONSTANT       text.7 $88, "CONSTANT"
+                data.w _SEMI    ; link to ;
+                data.w CONSTANT+2    ; PFAPTR
+;;
+;;
+;;
+CONSTANT:       data.w DOCOL
+                data.w CREATE
+                data.w SMUDGE
+                data.w COMMA
+                data.w LIT
+                data.w DOCON
+                data.w DCSTOR
+;;
+;;    VARIABLE
+;;
+_VARIABLE       text.7 $88, "VARIABLE"
+                data.w _CONSTANT    ; link to CONSTANT
+                data.w VARIABLE+2    ; PFAPTR
+;;
+;;
+;;
+VARIABLE:       data.w DOCOL
+                data.w CONSTANT
+                data.w LIT
+                data.w DOVAR
+                data.w DCSTOR
+;;
+;;    CODE
+;;
+_CODE           text.7 $c4, "CODE"
+                data.w _VARIABLE    ; link to VARIABLE
+                data.w CODE+2    ; PFAPTR
+;;
+;;
+;;
+CODE:           data.w DOCOL
+                data.w QEXEC
+                data.w CREATE
+                data.w ASSEMBLER
+                data.w MEM
+                data.w STORCSP
+    			data.w SEMIS
+
+;;
+;;    USER
+;;
+_USER           text.7 $84, "USER"
+                data.w _CODE    ; link to CODE
+                data.w USER+2    ; PFAPTR
+;;
+;;
+;;
+USER:           data.w DOCOL
+                data.w CREATE
+                data.w SMUDGE
+                data.w CCOMMA
+                data.w LIT
+                data.w DOUSE
+                data.w DCSTOR
+
+;;
+;;    0
+;;
+_ZERO           text.7 $81, "0"
+                data.w _USER    ; link to USER
+                data.w ZERO+2    ; PFAPTR
+;;
+;;    1
+;;
+_ONE            text.7 $81, "1"
+                data.w _ZERO    ; link to 0
+                data.w ONE+2    ; PFAPTR
+;;
+;;    2
+;;
+_TWO            text.7 $81, "2"
+                data.w _ONE    ; link to 1
+                data.w TWO+2    ; PFAPTR
+;;
+;;    3
+;;
+_THREE          text.7 $81, "3"
+                data.w _TWO    ; link to 2
+                data.w THREE+2    ; PFAPTR
+;;
+;;    4
+;;
+_FOUR           text.7 $81, "4"
+                data.w _THREE    ; link to 3
+                data.w FOUR+2    ; PFAPTR
+;;
+;;    BL
+;;
+_BL             text.7 $82, "BL"
+                data.w _FOUR    ; link to 4
+                data.w BL+2    ; PFAPTR
+;;
+;;    TIB
+;;
+_TIB            text.7 $83, "TIB"
+                data.w _BL    ; link to BL
+                data.w TIB+2    ; PFAPTR
+;;
+;;    S0
+;;
+_S0             text.7 $82, "S0"
+                data.w _TIB    ; link to TIB
+                data.w SZ+2    ; PFAPTR
+;;
+;;    R0
+;;
+_R0             text.7 $82, "R0"
+                data.w _S0    ; link to S0
+                data.w RZ+2    ; PFAPTR
+;;
+;;    UC/L
+;;
+_UCL            text.7 $84, "UC/L"
+                data.w _R0    ; link to R0
+                data.w UCL+2    ; PFAPTR
+;;
+;;    UPAD
+;;
+_UPAD           text.7 $84, "UPAD"
+                data.w _UCL    ; link to UC/L
+                data.w UPAD+2    ; PFAPTR
+;;
+;;    UR/W
+;;
+_URW            text.7 $84, "UR/W"
+                data.w _UPAD    ; link to UPAD
+                data.w URW+2    ; PFAPTR
+;;
+;;    BASE
+;;
+_BASE           text.7 $84, "BASE"
+                data.w _URW    ; link to UR/W
+                data.w BASE+2    ; PFAPTR
+;;
+;;    CLD/WRM
+;;
+_CLDWRM         text.7 $87, "CLD/WRM"
+                data.w _BASE    ; link to BASE
+                data.w CLDWRM+2    ; PFAPTR
+;;
+;;    IN
+;;
+_IN             text.7 $82, "IN"
+                data.w _CLDWRM    ; link to CLD/WRM
+                data.w IN+2    ; PFAPTR
+;;
+;;    DPL
+;;
+_DPL            text.7 $83, "DPL"
+                data.w _IN    ; link to IN
+                data.w DPL+2    ; PFAPTR
+;;
+;;    HLD
+;;
+_HLD            text.7 $83, "HLD"
+                data.w _DPL    ; link to DPL
+                data.w HLD+2    ; PFAPTR
+;;
+;;    DISKNO
+;;
+_DISKNO         text.7 $86, "DISKNO"
+                data.w _HLD    ; link to HLD
+                data.w DDISKNO+2    ; PFAPTR
+;;
+;;
+;;
+DDISKNO:        data.w DOUSE
+                data.b $16
+;;
+;;    CYLINDER
+;;
+_CYLINDER       text.7 $88, "CYLINDER"
+                data.w _DISKNO    ; link to DISKNO
+                data.w DCYLINDER+2    ; PFAPTR
+;;
+;;
+;;
+DCYLINDER:      data.w DOUSE
+                data.b $18
+;;
+;;    B/SIDE
+;;
+_BSIDE          text.7 $86, "B/SIDE"
+                data.w _CYLINDER    ; link to CYLINDER
+                data.w BSIDE+2    ; PFAPTR
+;;
+;;
+;;
+BSIDE:          data.w DOUSE
+                data.b $1c
+;;
+;;    UFIRST
+;;
+_UFIRST         text.7 $86, "UFIRST"
+                data.w _BSIDE    ; link to B/SIDE
+                data.w UFIRST+2    ; PFAPTR
+;;
+;;
+;;
+UFIRST:         data.w DOUSE
+                data.b $1e
+;;
+;;    ULIMIT
+;;
+_ULIMIT         text.7 $86, "ULIMIT"
+                data.w _UFIRST    ; link to UFIRST
+                data.w ULIMIT+2    ; PFAPTR
+;;
+;;
+;;
+ULIMIT:         data.w DOUSE
+                data.b $20
+;;
+;;    OFFSET
+;;
+_OFFSET         text.7 $86, "OFFSET"
+                data.w _ULIMIT    ; link to ULIMIT
+                data.w OFFSET+2    ; PFAPTR
+;;
+;;
+;;
+OFFSET:         data.w DOUSE
+                data.b $22
+;;
+;;    WIDTH
+;;
+_WIDTH          text.7 $85, "WIDTH"
+                data.w _OFFSET    ; link to OFFSET
+                data.w WIDTH+2    ; PFAPTR
+;;
+;;
+;;
+WIDTH:          data.w DOUSE
+                data.b $24
+;;
+;;    WARNING
+;;
+_WARNING        text.7 $87, "WARNING"
+                data.w _WIDTH    ; link to WIDTH
+                data.w WARNING+2    ; PFAPTR
+;;
+;;
+;;
+WARNING:        data.w DOUSE
+                data.b $26
+;;
+;;    FENCE
+;;
+_FENCE          text.7 $85, "FENCE"
+                data.w _WARNING    ; link to WARNING
+                data.w FENCE+2    ; PFAPTR
+;;
+;;
+;;
+FENCE:          data.w DOUSE
+                data.b $28
+;;
+;;    DP
+;;
+_DP             text.7 $82, "DP"
+                data.w _FENCE    ; link to FENCE
+                data.w DP+2    ; PFAPTR
+;;
+;;
+;;
+DP:         	data.w DOUSE
+                data.b $2a
+;;
+;;    HEADERLESS
+;;
+_HEADERLESS     text.7 $8a, "HEADERLESS"
+                data.w _DP    ; link to DP
+                data.w HEADERLESS+2    ; PFAPTR
+;;
+;;
+;;
+HEADERLESS:     data.w DOUSE
+                data.b $2e
+;;
+;;    VOC-LINK
+;;
+_VOCL           text.7 $88, "VOC-LINK"
+                data.w _HEADERLESS    ; link to HEADERLESS
+                data.w VOCL+2    ; (Doesn't seem right)
+;;
+;;
+;;
+VOCL:         	data.w DOUSE
+    			data.b $30
+VOCL4:			data.w DOUSE
+				data.b $34
+VOCL8:			data.w DOUSE
+				data.b $3a
+
+;;
+;;    UABORT
+;;
+_UABORT         text.7 $86, "UABORT"
+    			data.w _VOCL    ; link to VOC-LINK
+    			data.w UABORT+2    ; PFAPTR
+;;
+;;
+;;
+UABORT:         data.w DOUSE
+    			data.b $3e
+;;
+;;    USE
+;;
+_USE            text.7 $83, "USE"
+    			data.w _UABORT    ; link to UABORT
+    			data.w USE+2    ; PFAPTR
+
+USE:         	data.w DOUSE
+    			data.b $40
+
+;;
+;;    PREV
+;;
+_PREV           text.7 $84, "PREV"
+                data.w _USE    ; link to USE
+                data.w PREV+2    ; PFAPTR
+
+PREV:         	data.w DOUSE
+    			data.b $42
+
+;;
+;;    BLK
+;;
+_BLK            text.7 $83, "BLK"
+    			data.w _PREV    ; link to PREV
+    			data.w BLK+2    ; PFAPTR
+
+BLK:         	data.w DOUSE
+    			data.b $44
+
+;;
+;;    SCR
+;;
+_SCR            text.7 $83, "SCR"
+    			data.w _BLK    ; link to BLK
+    			data.w SCR+2    ; PFAPTR
+
+SCR:         	data.w DOUSE
+                data.b $46
+
+;;
+;;    CONTEXT
+;;
+_CONTEXT        text.7 $87, "CONTEXT"
+    			data.w _SCR    ; link to SCR
+    			data.w CONTEXT+2    ; PFAPTR
+
+CONTEXT:        data.w DOUSE
+    			data.b $48
+
+;;
+;;    CURRENT
+;;
+_CURRENT        text.7 $87, "CURRENT"
+                data.w _CONTEXT    ; link to CONTEXT
+    			data.w CURRENT+2    ; PFAPTR
+
+CURRENT:        data.w DOUSE
+    			data.b $4a
+
+;;
+;;    STATE
+;;
+_STATE          text.7 $85, "STATE"
+    			data.w _CURRENT    ; link to CURRENT
+    			data.w STATE+2    ; PFAPTR
+
+STATE:         	data.w DOUSE
+                data.b $4c
+
+;;
+;;    CSP
+;;
+_CSP            text.7 $83, "CSP"
+                data.w _STATE    ; link to STATE
+                data.w CSP+2    ; PFAPTR
+
+CSP:         	data.w DOUSE
+    			data.b $4e
+;;
+;;    MODE
+;;
+_MODE           text.7 $84, "MODE"
+    			data.w _CSP    ; link to CSP
+    			data.w MODE+2    ; PFAPTR
+
+MODE:         	data.w DOUSE
+    			data.b N-1
+;;
+;;    KHZ
+;;
+_KHZ            text.7 $83, "KHZ"
+    			data.w _MODE    ; link to MODE
+    			data.w KHZ+2    ; PFAPTR
+
+KHZ:         	data.w DOUSE
+    			data.b N+1
+;;
+;;    C/L
+;;
+DCL             text.7 $83, "C/L"
+    			data.w _KHZ    ; link to KHZ
+    			data.w CL+2    ; PFAPTR
+;;
+;;    FIRST
+;;
+_FIRST          text.7 $85, "FIRST"
+    			data.w DCL    ; link to C/L
+    			data.w FIRST+2    ; PFAPTR
+
+FIRST:         	data.w DOCOL
+    			data.w UFIRST
+    			data.w AT
+    			data.w SEMIS
+;;
+;;    LIMIT
+;;
+_LIMIT          text.7 $85, "LIMIT"
+    			data.w _FIRST    ; link to FIRST
+    			data.w LIMIT+2    ; PFAPTR
+
+LIMIT:         	data.w DOCOL
+    			data.w ULIMIT
+    			data.w AT
+    			data.w SEMIS
+;;
+;;    PAD
+;;
+_PAD            text.7 $83, "PAD"
+    			data.w _LIMIT    ; link to LIMIT
+    			data.w PAD+2    ; PFAPTR
+;;
+;;    1+
+;;
+_ONEPLUS        text.7 $82, "1+"
+    			data.w _PAD    ; link to PAD
+    			data.w ONEPLUS+2    ; PFAPTR
+;;
+;;    2+
+;;
+_2PLUS          text.7 $82, "2+"
+    			data.w _ONEPLUS    ; link to 1+
+    			data.w TWOPLUS+2    ; PFAPTR
+;;
+;;    1-
+;;
+_1SUB           text.7 $82, "1-"
+                data.w _2PLUS    ; link to 2+
+                data.w ONEMINUS+2    ; PFAPTR
+;;
+;;    2-
+;;
+_2SUB           text.7 $82, "2-"
+                data.w _1SUB    ; link to 1-
+                data.w TWOMINUS+2    ; PFAPTR
+;;
+;;    DP/
+;;
+_DPDIV          text.7 $83, "DP/"
+                data.w _2SUB    ; link to 2-
+                data.w DPDIV+2    ; PFAPTR
+
+DPDIV:         	data.w DOCOL
+    			data.w DP
+    			data.w HEADERLESS
+    			data.w AT
+    			data.w ZBRAN
+    			data.w $0004
+    			data.w TWOPLUS
+    			data.w SEMIS
+;;
+;;    HERE/
+;;
+_HEREDIV        text.7 $85, "HERE/"
+    			data.w _DPDIV    ; link to DP/
+    			data.w HEREDIV+2    ; PFAPTR
+
+HEREDIV:        data.w DOCOL
+    			data.w DPDIV
+    			data.w AT
+    			data.w SEMIS
+;;
+;;    ALLOT/
+;;
+_ALLOTDIV       text.7 $86, "ALLOT/"
+    			data.w _HEREDIV    ; link to HERE/
+    			data.w ALLOTDIV+2    ; PFAPTR
+
+ALLOTDIV:       data.w DOCOL
+    			data.w DPDIV
+    			data.w PSTORE
+    			data.w SEMIS
+;;
+;;    ,/
+;;
+_COMMADIV       text.7 $82, ",/"
+    			data.w _ALLOTDIV    ; link to ALLOT/
+    			data.w COMMADIV+2    ; PFAPTR
+
+COMMADIV:       data.w DOCOL
+    			data.w HEREDIV
+    			data.w STORE
+    			data.w TWO
+    			data.w ALLOTDIV
+    			data.w SEMIS
+;;
+;;    HERE
+;;
+_HERE           text.7 $84, "HERE"
+                data.w _COMMADIV    ; link to ,/
+                data.w HERE+2    ; PFAPTR
+
+HERE:         	data.w DOCOL
+    			data.w DP
+    			data.w AT
+    			data.w SEMIS
+;;
+;;    ALLOT
+;;
+_ALLOT          text.7 $85, "ALLOT"
+    			data.w _HERE    ; link to HERE
+                data.w ALLOT+2    ; PFAPTR
+
+ALLOT:         	data.w DOCOL
+    			data.w DP
+    			data.w PSTORE
+    			data.w SEMIS
+;;
+;;    ,
+;;
+_COMMA          text.7 $81, ","
+    			data.w _ALLOT    ; link to ALLOT
+    			data.w COMMA+2    ; PFAPTR
+
+COMMA:         	data.w DOCOL
+    			data.w HERE
+    			data.w STORE
+    			data.w TWO
+    			data.w ALLOT
+    			data.w SEMIS
+;;
+;;    C,
+;;
+_CCOMMA         text.7 $82, "C,"
+    			data.w _COMMA    ; link to ,
+    			data.w CCOMMA+2    ; PFAPTR
+
+CCOMMA:         data.w DOCOL
+    			data.w HERE
+    			data.w CSTOR
+    			data.w ONE
+    			data.w ALLOT
+    			data.w SEMIS
+;;
+;;    -
+;;
+_SUB            text.7 $81, "-"
+    			data.w _CCOMMA    ; link to C,
+    			data.w SUB+2    ; PFAPTR
+;;
+;;    =
+;;
+_EQ             text.7 $81, "="
+    			data.w _SUB    ; link to -
+    			data.w EQUAL+2    ; PFAPTR
+;;
+;;    U<
+;;
+_ULT           	text.7 $82, "U<"
+    			data.w _EQ    ; link to =
+    			data.w ULESS+2    ; PFAPTR
+;;
+;;    <
+;;
+_LT             text.7 $81, "<"
+    			data.w _ULT    ; link to U<
+    			data.w LESS+2    ; PFAPTR
+;;
+;;    >
+;;
+_GT             text.7 $81, ">"
+    			data.w _LT    ; link to <
+    			data.w GT+2    ; PFAPTR
+;;
+;;    ROT
+;;
+_ROT            text.7 $83, "ROT"
+    			data.w _GT    ; link to >
+    			data.w ROT+2    ; PFAPTR
+;;
+;;    PICK
+;;
+_PICK           text.7 $84, "PICK"
+    			data.w _ROT    ; link to ROT
+    			data.w PICK+2    ; PFAPTR
+;;
+;;    SPACE
+;;
+_SPACE          text.7 $85, "SPACE"
+    			data.w _PICK    ; link to PICK
+    			data.w SPACE+2    ; PFAPTR
+;;
+;;    -DUP
+;;
+_SUBDUP         text.7 $84, "-DUP"
+    			data.w _SPACE    ; link to SPACE
+    			data.w DDUP+2    ; PFAPTR
+;;
+;;    TRAVERSE
+;;
+_TRAVERSE       text.7 $88, "TRAVERSE"
+    			data.w _SUBDUP    ; link to -DUP
+    			data.w TRAVERSE+2    ; PFAPTR
+
+TRAVERSE:       data.w DOCOL
+    			data.w SWAP
+    			data.w OVER
+    			data.w PLUS
+    			data.w CLIT
+    			data.b $7f
+    			data.w OVER
+    			data.w CAT
+    			data.w LESS
+    			data.w ZBRAN
+    			data.w $fff1
+    			data.w SWAP
+    			data.w DROP
+    			data.w SEMIS
+;;
+;;    LATEST
+;;
+_LATEST         text.7 $86, "LATEST"
+    			data.w _TRAVERSE    ; link to TRAVERSE
+    			data.w LATEST+2    ; PFAPTR
+
+LATEST:         data.w DOCOL
+    			data.w CURRENT
+    			data.w AT
+    			data.w AT
+    			data.w SEMIS
+;;
+;;    LFA
+;;
+_LFA            text.7 $83, "LFA"
+    			data.w _LATEST    ; link to LATEST
+    			data.w _CFA    ; PFAPTR
+
+LFA:         	data.w TWOMINUS+2
+;;
+;;    CFA
+;;
+_CFA            text.7 $83, "CFA"
+    			data.w _LFA    ; link to LFA
+    			data.w CFA+2    ; PFAPTR
+
+CFA:         	data.w DOCOL
+    			data.w AT
+    			data.w TWOMINUS
+    			data.w SEMIS
+;;
+;;    NFA
+;;
+_NFA            text.7 $83, "NFA"
+    			data.w _CFA    ; link to CFA
+    			data.w NFA+2    ; PFAPTR
+
+NFA:         	data.w DOCOL
+    			data.w CLIT
+    			data.b $03
+    			data.w SUB
+    			data.w LIT
+    			data.w $ffff
+    			data.w TRAVERSE
+    			data.w SEMIS
+;;
+;;    PFAPTR
+;;
+_PFAPTR         text.7 $86, "PFAPTR"
+    			data.w _NFA    ; link to NFA
+    			data.w PFAPTR+2    ; PFAPTR
+;;
+;;
+;;
+PFAPTR:         data.w DOCOL
+    			data.w ONE
+    			data.w TRAVERSE
+    			data.w CLIT
+    			data.b $03
+    			data.w PLUS
+    			data.w SEMIS
+;;
+;;    !CSP
+;;
+_STORCSP        text.7 $84, "!CSP"
+    			data.w _PFAPTR    ; link to PFAPTR
+    			data.w STORCSP+2    ; PFAPTR
+
+STORCSP:        data.w DOCOL
+    			data.w SPAT
+    			data.w CSP
+    			data.w STORE
+    			data.w SEMIS
+;;
+;;    ?ERROR
+;;
+_QERROR         text.7 $86, "?ERROR"
+                data.w _STORCSP    ; link to !CSP
+                data.w QERROR+2    ; PFAPTR
+
+QERROR:         data.w DOCOL
+    			data.w SWAP
+    			data.w ZBRAN
+    			data.w $0004
+    			data.w ERR
+    			data.w DROP
+    			data.w SEMIS
+;;
+;;    ?COMP
+;;
+_QCOMP          text.7 $85, "?COMP"
+    			data.w _QERROR    ; link to ?ERROR
+    			data.w QCOMP+2    ; PFAPTR
+
+QCOMP:         	data.w DOCOL
+    			data.w STATE
+    			data.w AT
+    			data.w ZEQ
+    			data.w CLIT
+    			data.b $11
+    			data.w QERROR
+    			data.w SEMIS
+;;
+;;    ?EXEC
+;;
+_QEXEC          text.7 $85, "?EXEC"
+    			data.w _QCOMP    ; link to ?COMP
+    			data.w QEXEC+2    ; PFAPTR
+
+QEXEC:         	data.w DOCOL
+    			data.w STATE
+    			data.w AT
+    			data.w CLIT
+    			data.b $12
+    			data.w QERROR
+    			data.w SEMIS
+;;
+;;    ?PAIRS
+;;
+_QPAIRS         text.7 $86, "?PAIRS"
+    			data.w _QEXEC    ; link to ?EXEC
+    			data.w QPAIRS+2    ; PFAPTR
+
+QPAIRS:         data.w DOCOL
+    			data.w SUB
+    			data.w CLIT
+    			data.b $13
+    			data.w QERROR
+    			data.w SEMIS
+;;
+;;    ?CSP
+;;
+_QCSP           text.7 $84, "?CSP"
+                data.w _QPAIRS    ; link to ?PAIRS
+    			data.w QCSP+2    ; PFAPTR
+
+QCSP:         	data.w DOCOL
+    			data.w SPAT
+    			data.w CSP
+    			data.w AT
+    			data.w SUB
+    			data.w CLIT
+    			data.b $14
+    			data.w QERROR
+    			data.w SEMIS
+;;
+;;    COMPILE
+;;
+_COMPILE        text.7 $87, "COMPILE"
+    			data.w _QCSP    ; link to ?CSP
+    			data.w COMPILE+2    ; PFAPTR
+
+COMPILE:        data.w DOCOL
+    			data.w QCOMP
+    			data.w RFROM
+    			data.w DUP
+    			data.w TWOPLUS
+    			data.w GTR
+    			data.w AT
+    			data.w COMMA
+    			data.w SEMIS
+;;
+;;    [
+;;
+_LBRAC          text.7 $c1, "["
+    			data.w _COMPILE    ; link to COMPILE
+    			data.w LBRAC+2    ; PFAPTR
+
+LBRAC:         	data.w DOCOL
+    			data.w ZERO
+    			data.w STATE
+    			data.w STORE
+    			data.w SEMIS
+;;
+;;    ]
+;;
+_RBRAC          text.7 $81, "]"
+    			data.w _LBRAC    ; link to [
+    			data.w RBRAC+2    ; PFAPTR
+
+RBRAC:         	data.w DOCOL
+    			data.w CLIT
+    			data.b $c0
+    			data.w STATE
+    			data.w STORE
+    			data.w SEMIS
+;;
+;;    SMUDGE
+;;
+_SMUDGE         text.7 $86, "SMUDGE"
+    			data.w _RBRAC    ; link to ]
+    			data.w SMUDGE+2    ; PFAPTR
+
+SMUDGE:         data.w DOCOL
+    			data.w LATEST
+    			data.w BL
+    			data.w TOGGL
+    			data.w SEMIS
+;;
+;;    HEX
+;;
+_HEX            text.7 $83, "HEX"
+    			data.w _SMUDGE    ; link to SMUDGE
+    			data.w HEX+2    ; PFAPTR
+;;
+;;    DECIMAL
+;;
+_DECIMAL             text.7 $87, "DECIMAL"
+                  data.w _HEX    ; link to HEX
+                  data.w DECIMAL+2    ; PFAPTR
+;;
+;;    (;CODE)
+;;
+_PSEMICODE             text.7 $87, "(;CODE)"
+                  data.w _DECIMAL    ; link to DECIMAL
+                  data.w PSEMICODE+2    ; PFAPTR
+;;
+;;
+;;
+PSEMICODE:         data.w DOCOL
+                  data.w RFROM
+                  data.w LATEST
+                  data.w PFAPTR
+                  data.w CFA
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    ;CODE
+;;
+_SEMICODE             text.7 $c5, ";CODE"
+                  data.w _PSEMICODE    ; link to (;CODE)
+                  data.w SEMICODE+2    ; PFAPTR
+;;
+;;
+;;
+SEMICODE:         data.w DOCOL
+                  data.w QCSP
+                  data.w COMPILE
+                  data.w PSEMICODE
+                  data.w LBRAC
+                  data.w ASSEMBLER
+                  data.w SEMIS
+;;
+;;    <BUILDS
+;;
+_LTBUILDS             text.7 $87, "<BUILDS"
+                  data.w _SEMICODE    ; link to ;CODE
+                  data.w LTBUILDS+2    ; PFAPTR
+;;
+;;
+;;
+LTBUILDS:         data.w DOCOL
+                  data.w ZERO
+                  data.w CONSTANT
+                  data.w SEMIS
+;;
+;;    DOES>
+;;
+_DOESGT             text.7 $85, "DOES>"
+                  data.w _LTBUILDS    ; link to <BUILDS
+                  data.w DOESGT+2    ; PFAPTR
+;;
+;;
+;;
+DOESGT:         data.w DOCOL
+                  data.w RFROM
+                  data.w LATEST
+                  data.w PFAPTR
+                  data.w AT
+                  data.w STORE
+                  data.w LIT
+                  data.w DOES
+                  data.w DCSTOR
+;;
+;;    COUNT
+;;
+_COUNT             text.7 $85, "COUNT"
+                  data.w _DOESGT    ; link to DOES>
+                  data.w COUNT+2    ; PFAPTR
+;;
+;;    TYPE
+;;
+_TYPE             text.7 $84, "TYPE"
+                  data.w _COUNT    ; link to COUNT
+                  data.w TYPE+2    ; PFAPTR
+;;
+;;    -TRAILING
+;;
+_SUBTRAILING             text.7 $89, "-TRAILING"
+                  data.w _TYPE    ; link to TYPE
+                  data.w DTRAI+2    ; PFAPTR
+;;
+;;    (.")
+;;
+_PDOTQUOT             text.7 $84, "(.\")"
+                  data.w _SUBTRAILING    ; link to -TRAILING
+                  data.w PDOTQ+2    ; PFAPTR
+;;
+;;    ."
+;;
+_DOTQUOT             text.7 $c2, ".\""
+                  data.w _PDOTQUOT    ; link to (.")
+                  data.w DDOTQUOT+2    ; PFAPTR
+;;
+;;
+;;
+DDOTQUOT:       data.w DOCOL
+                data.w CLIT
+                data.b $22
+                data.w STATE
+                data.w AT
+                data.w ZBRAN
+                data.w $0012
+                data.w COMPILE
+    			data.w PDOTQ
+;;
+;;
+;;
+CONT:         data.w FWORD
+                  data.w HERE
+                  data.w CAT
+                  data.w ONEPLUS
+                  data.w ALLOT
+                  data.w SEMIS
+                  data.w FWORD
+                  data.w HERE
+                  data.w COUNT
+                  data.w TYPE
+                  data.w SEMIS
+;;
+;;    EXPECT
+;;
+DEXPECT           text.7 $86, "EXPECT"
+                  data.w _DOTQUOT    ; link to ."
+                  data.w EXPECT+2    ; PFAPTR
+;;
+;;    QUERY
+;;
+_QUERY             text.7 $85, "QUERY"
+                  data.w DEXPECT    ; link to EXPECT
+                  data.w QUERY+2    ; PFAPTR
+;;
+;;     
+;;
+_FX             text.7 $c1, "\0"
+                  data.w _QUERY    ; link to QUERY
+                  data.w FX+2    ; PFAPTR
+;;
+;;
+;;
+FX:         data.w DOCOL
+                  data.w BLK
+                  data.w AT
+                  data.w ZBRAN
+                  data.w $0010
+                  data.w ONE
+                  data.w BLK
+                  data.w PSTORE
+                  data.w ZERO
+                  data.w IN
+                  data.w STORE
+                  data.w QEXEC
+                  data.w RFROM
+                  data.w DROP
+                  data.w SEMIS
+;;
+;;    FILL
+;;
+_FILL             text.7 $84, "FILL"
+                  data.w _FX    ; link to  
+                  data.w FILL_+2    ; PFAPTR
+;;
+;;    ERASE
+;;
+_ERASE             text.7 $85, "ERASE"
+                  data.w _FILL    ; link to FILL
+                  data.w ERASE+2    ; PFAPTR
+;;
+;;    BLANKS
+;;
+_BLANKS             text.7 $86, "BLANKS"
+                  data.w _ERASE    ; link to ERASE
+                  data.w BLANKS+2    ; PFAPTR
+;;
+;;    HOLD
+;;
+_HOLD             text.7 $84, "HOLD"
+                  data.w _BLANKS    ; link to BLANKS
+                  data.w HOLD+2    ; PFAPTR
+;;
+;;    WORD
+;;
+_FWORD             text.7 $84, "WORD"
+                  data.w _HOLD    ; link to HOLD
+                  data.w FWORD+2    ; PFAPTR
+;;
+;;
+;;
+FWORD:         data.w DOCOL
+                  data.w BLK
+                  data.w AT
+                  data.w ZBRAN
+                  data.w $000c
+                  data.w BLK
+                  data.w AT
+                  data.w BLOCK
+                  data.w BRAN
+                  data.w $0006
+                  data.w TIB
+                  data.w AT
+                  data.w IN
+                  data.w AT
+                  data.w PLUS
+                  data.w SWAP
+                  data.w ENCLOSE
+                  data.w HERE
+                  data.w CLIT
+                  data.b $22
+                  data.w BLANKS
+                  data.w IN
+                  data.w PSTORE
+                  data.w OVER
+                  data.w SUB
+                  data.w GTR
+                  data.w R
+                  data.w HERE
+                  data.w CSTOR
+                  data.w PLUS
+                  data.w HERE
+                  data.w ONEPLUS
+                  data.w RFROM
+                  data.w CMOVE
+                  data.w SEMIS
+;;
+;;    (NUMBER)
+;;
+_PNUMBER             text.7 $88, "(NUMBER)"
+                  data.w _FWORD    ; link to WORD
+                  data.w LTNUMBER+2    ; PFAPTR
+;;
+;;    NUMBER
+;;
+_NUMBER             text.7 $86, "NUMBER"
+                  data.w _PNUMBER    ; link to (NUMBER)
+                  data.w NUMBER+2    ; PFAPTR
+;;
+;;
+;;
+NUMBER:         data.w DOCOL
+                  data.w ZERO
+                  data.w ZERO
+                  data.w ROT
+                  data.w DUP
+                  data.w ONEPLUS
+                  data.w CAT
+                  data.w CLIT
+                  data.b $2d
+                  data.w EQUAL
+                  data.w DUP
+                  data.w GTR
+                  data.w PLUS
+                  data.w LIT
+                  data.w $ffff
+                  data.w DPL
+                  data.w STORE
+                  data.w LTNUMBER
+                  data.w DUP
+                  data.w CAT
+                  data.w BL
+                  data.w SUB
+                  data.w ZBRAN
+                  data.w $0015
+                  data.w DUP
+                  data.w CAT
+                  data.w CLIT
+                  data.b $2e
+                  data.w SUB
+                  data.w ZERO
+                  data.w QERROR
+                  data.w ZERO
+                  data.w BRAN
+                  data.w $ffdd
+                  data.w DROP
+                  data.w RFROM
+                  data.w ZBRAN
+                  data.w $0004
+                  data.w DNEGATE
+                  data.w SEMIS
+;;
+;;    -FIND
+;;
+_SUBFIND             text.7 $85, "-FIND"
+                  data.w _NUMBER    ; link to NUMBER
+                  data.w SUBFIND+2    ; PFAPTR
+;;
+;;
+;;
+SUBFIND:         data.w DOCOL
+                  data.w BL
+                  data.w FWORD
+                  data.w HERE
+                  data.w CONTEXT
+                  data.w AT
+                  data.w AT
+                  data.w FIND
+                  data.w DUP
+                  data.w ZEQ
+                  data.w ZBRAN
+                  data.w $000a
+                  data.w DROP
+                  data.w HERE
+                  data.w LATEST
+                  data.w FIND
+                  data.w SEMIS
+;;
+;;    (ABORT)
+;;
+_PABORT             text.7 $87, "(ABORT)"
+                  data.w _SUBFIND    ; link to -FIND
+                  data.w PABORT+2    ; PFAPTR
+;;
+;;
+;;
+PABORT:         data.w DOCOL
+                  data.w UABORT
+                  data.w AT
+                  data.w EXECUTE
+                  data.w SEMIS
+;;
+;;    ERROR
+;;
+_ERR             text.7 $85, "ERROR"
+                  data.w _PABORT    ; link to (ABORT)
+                  data.w ERR+2    ; PFAPTR
+;;
+;;
+;;
+ERR:         data.w DOCOL
+                  data.w WARNING
+                  data.w AT
+                  data.w ZLT
+                  data.w ZBRAN
+                  data.w $0004
+                  data.w PABORT
+                  data.w HERE
+                  data.w COUNT
+                  data.w CR
+                  data.w TYPE
+                  data.w PDOTQ
+                  data.b $03, " ? "
+                  data.w FMESSAGE
+                  data.w SPSTO
+                  data.w TWODROP
+                  data.w IN
+                  data.w AT
+                  data.w BLK
+                  data.w AT
+L1684             data.w LIT
+                  data.w $ffae
+                  data.w CLIT
+                  data.b $44
+                  data.w STORE
+                  data.w QUIT
+;;
+;;    ID.
+;;
+_ID             text.7 $83, "ID."
+                  data.w _ERR    ; link to ERROR
+                  data.w ID+2    ; PFAPTR
+;;
+;;
+;;
+ID:         data.w DOCOL
+                  data.w COUNT
+                  data.w ONEMINUS
+                  data.w CLIT
+                  data.b $1f
+                  data.w ANDD
+                  data.w TWODUP
+                  data.w TYPE
+                  data.w PLUS
+                  data.w AT
+                  data.w CLIT
+                  data.b $7f
+                  data.w ANDD
+                  data.w EMIT
+                  data.w SPACE
+                  data.w SEMIS
+;;
+;;    CREATE
+;;
+_CREATE             text.7 $86, "CREATE"
+                  data.w _ID    ; link to ID.
+                  data.w CREATE+2    ; PFAPTR
+;;
+;;
+;;
+CREATE:         data.w DOCOL
+                  data.w FIRST
+                  data.w HEREDIV
+                  data.w CLIT
+                  data.b $24
+                  data.w PLUS
+                  data.w ULESS
+                  data.w TWO
+                  data.w QERROR
+                  data.w FIRST
+                  data.w HERE
+                  data.w CLIT
+                  data.b $a0
+                  data.w PLUS
+                  data.w ULESS
+                  data.w TWO
+                  data.w QERROR
+                  data.w SUBFIND
+                  data.w ZBRAN
+                  data.w $0018
+                  data.w DROP
+                  data.w CR
+                  data.w NFA
+                  data.w ID
+                  data.w PDOTQ
+                  data.b $0b, "NOT UNIQUE "
+                  data.w HERE
+                  data.w HEREDIV
+                  data.w OVER
+                  data.w CAT
+                  data.w ONEPLUS
+                  data.w CMOVE
+                  data.w HEREDIV
+                  data.w DUP
+                  data.w CAT
+                  data.w WIDTH
+                  data.w AT
+                  data.w MIN
+                  data.w ONEPLUS
+                  data.w ALLOTDIV
+                  data.w DP
+                  data.w CAT
+                  data.w CLIT
+                  data.b $fd
+                  data.w EQUAL
+                  data.w ALLOT
+                  data.w DUP
+                  data.w CLIT
+                  data.b $a0
+                  data.w TOGGL
+                  data.w HEREDIV
+                  data.w ONEMINUS
+                  data.w CLIT
+                  data.b $80
+                  data.w TOGGL
+                  data.w LATEST
+                  data.w COMMADIV
+                  data.w CURRENT
+                  data.w AT
+                  data.w STORE
+                  data.w HERE
+                  data.w TWOPLUS
+                  data.w HEADERLESS
+                  data.w AT
+                  data.w ZEQ
+                  data.w ZBRAN
+                  data.w $0004
+                  data.w TWOPLUS
+                  data.w DUP
+                  data.w COMMADIV
+                  data.w COMMA
+                  data.w SEMIS
+;;
+;;    [COMPILE]
+;;
+_BRACCOMPILE             text.7 $c9, "[COMPILE]"
+                  data.w _CREATE    ; link to CREATE
+                  data.w BRACCOMPILE+2    ; PFAPTR
+;;
+;;
+;;
+BRACCOMPILE:         data.w DOCOL
+                  data.w SUBFIND
+                  data.w ZEQ
+                  data.w ZERO
+                  data.w QERROR
+                  data.w DROP
+                  data.w CFA
+                  data.w COMMA
+                  data.w SEMIS
+;;
+;;    LITERAL
+;;
+_LITERAL             text.7 $c7, "LITERAL"
+                  data.w _BRACCOMPILE    ; link to [COMPILE]
+                  data.w LITERAL+2    ; PFAPTR
+;;
+;;
+;;
+LITERAL:         data.w DOCOL
+                  data.w STATE
+                  data.w AT
+                  data.w ZBRAN
+                  data.w $001c
+                  data.w DUP
+                  data.w LIT
+                  data.w $ff00
+                  data.w ANDD
+                  data.w ZBRAN
+                  data.w $000a
+                  data.w COMPILE
+                  data.w LIT
+                  data.w COMMA
+                  data.w SEMIS
+;;
+;;
+;;
+CREATE5:        data.w COMPILE
+                data.w CLIT
+                data.b $aa
+    			data.b $c5
+				data.w SEMIS
+;;
+;;    DLITERAL
+;;
+_DLITERAL       text.7 $c8, "DLITERAL"
+    			data.w _LITERAL    ; link to LITERAL
+    			data.w DLITERAL+2    ; PFAPTR
+;;
+;;
+;;
+DLITERAL:       data.w DOCOL
+    			data.w STATE
+    			data.w AT
+    			data.w ZBRAN
+    			data.w $0008
+    			data.w SWAP
+    			data.w LITERAL
+    			data.w LITERAL
+    			data.w SEMIS
+;;
+;;    ?STACK
+;;
+_QSTACK         text.7 $86, "?STACK"
+    			data.w _DLITERAL    ; link to DLITERAL
+    			data.w QSTACK+2    ; PFAPTR
+
+QSTACK:         data.w DOCOL
+    			data.w SPAT
+    			data.w CLIT
+    			data.b $c2
+    			data.w SWAP
+    			data.w ULESS
+    			data.w ONE
+    			data.w QERROR
+    			data.w SPAT
+    			data.w CLIT
+    			data.b $5d
+    			data.w ULESS
+    			data.w CLIT
+    			data.b $07
+    			data.w QERROR
+    			data.w SEMIS
+;;
+;;    INTERPRET
+;;
+_INTERPRET      text.7 $89, "INTERPRET"
+    			data.w _QSTACK    ; link to ?STACK
+    			data.w INTERPRET+2    ; PFAPTR
+;;
+;;
+;;
+INTERPRET:      data.w DOCOL
+                  data.w SUBFIND
+                  data.w ZBRAN
+                  data.w $001e
+                  data.w STATE
+                  data.w AT
+                  data.w LESS
+                  data.w ZBRAN
+                  data.w $000a
+                  data.w CFA
+                  data.w COMMA
+                  data.w BRAN
+                  data.w $0006
+                  data.w CFA
+                  data.w EXECUTE
+                  data.w QSTACK
+                  data.w BRAN
+                  data.w $001c
+                  data.w HERE
+                  data.w NUMBER
+                  data.w DPL
+                  data.w AT
+                  data.w ONEPLUS
+                  data.w ZBRAN
+                  data.w $0008
+                  data.w DLITERAL
+                  data.w BRAN
+                  data.w $0006
+                  data.w DROP
+                  data.w LITERAL
+                  data.w QSTACK
+                  data.w BRAN
+                  data.w $ffc2
+;;
+;;    IMMEDIATE
+;;
+_IMMEDIATE      text.7 $89, "IMMEDIATE"
+    			data.w _INTERPRET    ; link to INTERPRET
+    			data.w IMMEDIATE+2    ; PFAPTR
+
+IMMEDIATE:      data.w DOCOL
+                  data.w LATEST
+                  data.w CLIT
+                  data.b $40
+                  data.w TOGGL
+                  data.w SEMIS
+;;
+;;    VOCABULARY
+;;
+_VOCABULARY     text.7 $8a, "VOCABULARY"
+    			data.w _IMMEDIATE    ; link to IMMEDIATE
+    			data.w VOCABULARY+2    ; PFAPTR
+;;
+;;
+;;
+VOCABULARY:         data.w DOCOL
+                  data.w LTBUILDS
+                  data.w LIT
+                  data.w $a081
+                  data.w COMMA
+                  data.w CURRENT
+                  data.w AT
+                  data.w TWOMINUS
+                  data.w COMMA
+                  data.w HERE
+                  data.w VOCL
+                  data.w AT
+                  data.w COMMA
+                  data.w VOCL
+                  data.w STORE
+                  data.w DOESGT
+                  data.w TWOPLUS
+                  data.w CONTEXT
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    FORTH
+;;
+_FORTH             text.7 $c5, "FORTH"
+                  data.w _VOCABULARY    ; link to VOCABULARY
+                  data.w FORTH+2    ; PFAPTR
+
+FORTH:         data.w DOCOL
+                  data.w VOCL4
+                  data.w CONTEXT
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    ASSEMBLER
+;;
+_ASSEMBLER             text.7 $c9, "ASSEMBLER"
+                  data.w _FORTH    ; link to FORTH
+                  data.w ASSEMBLER+2    ; PFAPTR
+;;
+;;
+;;
+ASSEMBLER:         data.w DOCOL
+                  data.w VOCL8
+                  data.w BRAN
+                  data.w $ffe6
+;;
+;;    DEFINITIONS
+;;
+_DEFINITIONS             text.7 $8b, "DEFINITIONS"
+                  data.w _ASSEMBLER    ; link to ASSEMBLER
+                  data.w DEFINITIONS+2    ; PFAPTR
+;;
+;;
+;;
+DEFINITIONS:         data.w DOCOL
+                  data.w CONTEXT
+                  data.w AT
+                  data.w CURRENT
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    (
+;;
+_OBRAC             text.7 $c1, "("
+                  data.w _DEFINITIONS    ; link to DEFINITIONS
+                  data.w OBRAC+2    ; PFAPTR
+;;
+;;
+;;
+OBRAC:         data.w DOCOL
+                  data.w CLIT
+                  data.b $29
+                  data.w FWORD
+                  data.w SEMIS
+;;
+;;    QUIT
+;;
+_QUIT             text.7 $84, "QUIT"
+                  data.w _OBRAC    ; link to (
+                  data.w QUIT+2    ; PFAPTR
+;;
+;;
+;;
+QUIT:         data.w DOCOL
+                  data.w ZERO
+                  data.w BLK
+                  data.w STORE
+                  data.w LBRAC
+                  data.w RPSTO
+                  data.w CR
+                  data.w QUERY
+                  data.w INTERPRET
+                  data.w STATE
+                  data.w AT
+                  data.w ZEQ
+                  data.w ZBRAN
+                  data.w $0007
+                  data.w PDOTQ
+                  data.b $02, "OK"
+                  data.w BRAN
+                  data.w $ffe7
+;;
+;;    ABORT
+;;
+_ABORT          text.7 $85, "ABORT"
+    			data.w _QUIT    ; link to QUIT
+    			data.w ABORT+2    ; PFAPTR
+
+ABORT:          data.w DOCOL
+    			data.w SPSTO
+    			data.w CR
+    			data.w PDOTQ
+    			data.b $0f, " RSC-FORTH V2.0"
+    			data.w FORTH
+    			data.w DEFINITIONS
+    			data.w QUIT
+    			data.w DOCOL
+KSTART:			data.w LIT
+				data.w $a55a
+                  data.w DUP
+                  data.w CLDWRM
+                  data.w AT
+                  data.w EQUAL
+                  data.w ZEQ
+                  data.w CLIT
+                  data.b $17
+                  data.w CAT
+                  data.w CLIT
+                  data.b $12
+                  data.w EQUAL
+                  data.w OR
+                  data.w ZBRAN
+                  data.w $0022
+                  data.w LIT
+                  data.w $037e
+                  data.w UPAD
+                  data.w STORE
+                  data.w LIT
+                  data.w UNKNOWN
+                  data.w DCYLINDER
+                  data.w CLIT
+                  data.b $28
+                  data.w CMOVE
+                  data.w LIT
+                  data.w _TASK
+                  data.w LIT
+                  data.w $0404
+                  data.w CLIT
+                  data.b $0b
+                  data.w CMOVE
+                  data.w CLDWRM
+                  data.w STORE
+                  data.w ABORT
+;;
+;;    COLD
+;;
+_COLD             text.7 $84, "COLD"
+                  data.w _ABORT    ; link to ABORT
+                  data.w COLD+2    ; PFAPTR
+;;
+;;    S->D
+;;
+_STOD             text.7 $84, "S->D"
+                  data.w _COLD    ; link to COLD
+                  data.w STOD+2    ; PFAPTR
+;;
+;;    +-
+;;
+_PLUSMINUS             text.7 $82, "+-"
+                  data.w _STOD    ; link to S->D
+                  data.w PM+2    ; PFAPTR
+;;
+;;    D+-
+;;
+_DPLUSMINUS             text.7 $83, "D+-"
+                  data.w _PLUSMINUS    ; link to +-
+                  data.w DPLUS1+2    ; PFAPTR
+;;
+;;    ABS
+;;
+_ABS             text.7 $83, "ABS"
+                  data.w _DPLUSMINUS    ; link to D+-
+                  data.w ABS+2    ; PFAPTR
+;;
+;;    DABS
+;;
+_DABS             text.7 $84, "DABS"
+                  data.w _ABS    ; link to ABS
+                  data.w DABS+2    ; PFAPTR
+;;
+;;    MIN
+;;
+_MIN             text.7 $83, "MIN"
+                  data.w _DABS    ; link to DABS
+                  data.w MIN+2    ; PFAPTR
+;;
+;;    MAX
+;;
+_MAX             text.7 $83, "MAX"
+                  data.w _MIN    ; link to MIN
+                  data.w $fc70    ; PFAPTR
+;;
+;;    M*
+;;
+_MMUL             text.7 $82, "M*"
+                  data.w _MAX    ; link to MAX
+                  data.w MMUL+2    ; PFAPTR
+;;
+;;    M/
+;;
+_MDIV             text.7 $82, "M/"
+                  data.w _MMUL    ; link to M*
+                  data.w MDIV+2    ; PFAPTR
+;;
+;;    *
+;;
+_MUL             text.7 $81, "*"
+                  data.w _MDIV    ; link to M/
+                  data.w MUL+2    ; PFAPTR
+;;
+;;    /MOD
+;;
+_DIVMOD             text.7 $84, "/MOD"
+                  data.w _MUL    ; link to *
+                  data.w DIVMOD+2    ; PFAPTR
+;;
+;;    /
+;;
+_DIV             text.7 $81, "/"
+                  data.w _DIVMOD    ; link to /MOD
+                  data.w DIV_+2    ; PFAPTR
+;;
+;;    MOD
+;;
+_MOD             text.7 $83, "MOD"
+                  data.w _DIV    ; link to /
+                  data.w MOD_+2    ; PFAPTR
+;;
+;;    */MOD
+;;
+_MULDIVMOD             text.7 $85, "*/MOD"
+                  data.w _MOD    ; link to MOD
+                  data.w MULDIVMOD+2    ; PFAPTR
+;;
+;;    */
+;;
+_MULDIV             text.7 $82, "*/"
+                  data.w _MULDIVMOD    ; link to */MOD
+                  data.w MULDIV+2    ; PFAPTR
+;;
+;;    M/MOD
+;;
+_MMOD             text.7 $85, "M/MOD"
+                  data.w _MULDIV    ; link to */
+                  data.w MDIVMOD+2    ; PFAPTR
+;;
+;;    +BUF
+;;
+_PLUSBUF             text.7 $84, "+BUF"
+                  data.w _MMOD    ; link to M/MOD
+                  data.w PLUSBUF+2    ; PFAPTR
+
+PLUSBUF:         data.w DOCOL
+                  data.w LIT
+                  data.w $0404
+                  data.w PLUS
+                  data.w LIMIT
+                  data.w LIT
+                  data.w $0404
+                  data.w SUB
+                  data.w OVER
+                  data.w ULESS
+                  data.w ZBRAN
+                  data.w $0006
+                  data.w DROP
+                  data.w FIRST
+                  data.w DUP
+                  data.w PREV
+                  data.w AT
+                  data.w SUB
+                  data.w SEMIS
+;;
+;;    UPDATE
+;;
+_UPDATE             text.7 $86, "UPDATE"
+                  data.w _PLUSBUF    ; link to +BUF
+                  data.w UPDATE+2    ; PFAPTR
+
+UPDATE:         data.w DOCOL
+                  data.w PREV
+                  data.w AT
+                  data.w AT
+                  data.w LIT
+                  data.w $8000
+                  data.w OR
+                  data.w PREV
+                  data.w AT
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    EMPTY-BUFFERS
+;;
+_EMPTYBUFFERS             text.7 $8d, "EMPTY-BUFFERS"
+                  data.w _UPDATE    ; link to UPDATE
+                  data.w EMPTYBUFFERS+2    ; PFAPTR
+
+EMPTYBUFFERS:         data.w DOCOL
+                  data.w FIRST
+                  data.w LIMIT
+                  data.w OVER
+                  data.w SUB
+                  data.w ERASE
+                  data.w FIRST
+                  data.w DUP
+                  data.w USE
+                  data.w STORE
+                  data.w PREV
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    BUFFER
+;;
+_BUFFER             text.7 $86, "BUFFER"
+                  data.w _EMPTYBUFFERS    ; link to EMPTY-BUFFERS
+                  data.w BUFFER+2    ; PFAPTR
+
+BUFFER:         data.w DOCOL
+                  data.w USE
+                  data.w AT
+                  data.w DUP
+                  data.w GTR
+                  data.w PLUSBUF
+                  data.w ZBRAN
+                  data.w $fffc
+                  data.w USE
+                  data.w STORE
+                  data.w R
+                  data.w AT
+                  data.w ZLT
+                  data.w ZBRAN
+                  data.w $0014
+                  data.w R
+                  data.w TWOPLUS
+                  data.w R
+                  data.w AT
+                  data.w LIT
+                  data.w $7fff
+                  data.w ANDD
+                  data.w ZERO
+                  data.w RW
+                  data.w R
+                  data.w STORE
+                  data.w R
+                  data.w PREV
+                  data.w STORE
+                  data.w RFROM
+                  data.w TWOPLUS
+                  data.w SEMIS
+;;
+;;    BLOCK
+;;
+_BLOCK             text.7 $85, "BLOCK"
+                  data.w _BUFFER    ; link to BUFFER
+                  data.w BLOCK+2    ; PFAPTR
+;;
+;;
+;;
+BLOCK:         data.w DOCOL
+                  data.w OFFSET
+                  data.w AT
+                  data.w PLUS
+                  data.w GTR
+                  data.w PREV
+                  data.w AT
+                  data.w DUP
+                  data.w AT
+                  data.w R
+                  data.w SUB
+                  data.w DUP
+                  data.w PLUS
+                  data.w ZBRAN
+                  data.w $0032
+                  data.w PLUSBUF
+                  data.w ZEQ
+                  data.w ZBRAN
+                  data.w $0012
+                  data.w DROP
+                  data.w R
+                  data.w BUFFER
+                  data.w DUP
+                  data.w R
+                  data.w ONE
+                  data.w RW
+                  data.w TWOMINUS
+                  data.w DUP
+                  data.w AT
+                  data.w R
+                  data.w SUB
+                  data.w DUP
+                  data.w PLUS
+                  data.w ZEQ
+                  data.w ZBRAN
+                  data.w $ffd8
+                  data.w DUP
+                  data.w PREV
+                  data.w STORE
+                  data.w RFROM
+                  data.w DROP
+                  data.w TWOPLUS
+                  data.w SEMIS
+;;
+;;    FLUSH
+;;
+_FLUSH             text.7 $85, "FLUSH"
+                  data.w _BLOCK    ; link to BLOCK
+                  data.w FLUSH+2    ; PFAPTR
+;;
+;;
+;;
+FLUSH:         data.w DOCOL
+                  data.w LIMIT
+                  data.w FIRST
+                  data.w SUB
+                  data.w LIT
+                  data.w $0404
+                  data.w DIV_
+                  data.w ONEPLUS
+                  data.w ZERO
+                  data.w DO
+                  data.w LIT
+                  data.w $7fff
+                  data.w BUFFER
+                  data.w DROP
+                  data.w LOOP
+                  data.w $fff6
+                  data.w SEMIS
+;;
+;;    DUMP
+;;
+_DDUMP             text.7 $84, "DUMP"
+                  data.w _FLUSH    ; link to FLUSH
+                  data.w DDUMP+2    ; PFAPTR
+;;
+;;
+;;
+DDUMP:         data.w DOCOL
+                  data.w ZERO
+                  data.w DO
+                  data.w CR
+                  data.w DUP
+                  data.w ZERO
+                  data.w CLIT
+                  data.b $05
+                  data.w DDOTR
+                  data.w SPACE
+                  data.w CLIT
+                  data.b $10
+                  data.w SWAP
+                  data.w OVER
+                  data.w ZERO
+                  data.w DO
+                  data.w DUP
+                  data.w CAT
+                  data.w THREE
+                  data.w DOTR
+                  data.w ONEPLUS
+                  data.w LOOP
+                  data.w $fff4
+                  data.w SWAP
+                  data.w PLOOP
+                  data.w $ffd6
+                  data.w DROP
+                  data.w CR
+                  data.w SEMIS
+;;
+;;    (LINE)
+;;
+_PLINE             text.7 $86, "(LINE)"
+                  data.w _DDUMP    ; link to DUMP
+                  data.w PLINE+2    ; PFAPTR
+;;
+;;
+;;
+PLINE:         data.w DOCOL
+                  data.w GTR
+                  data.w CLIT
+                  data.b $40
+                  data.w LIT
+                  data.w $0400
+                  data.w MULDIVMOD
+                  data.w RFROM
+                  data.w PLUS
+                  data.w BLOCK
+                  data.w PLUS
+                  data.w CLIT
+                  data.b $40
+                  data.w SEMIS
+;;
+;;    .LINE
+;;
+_DOTLINE             text.7 $85, ".LINE"
+                  data.w _PLINE    ; link to (LINE)
+                  data.w DOTLINE+2    ; PFAPTR
+;;
+;;
+;;
+DOTLINE:         data.w DOCOL
+                  data.w PLINE
+                  data.w DTRAI
+                  data.w TYPE
+                  data.w SEMIS
+;;
+;;    >LINE
+;;
+_GTLINE             text.7 $85, ">LINE"
+                  data.w _DOTLINE    ; link to .LINE
+                  data.w GTLINE+2    ; PFAPTR
+;;
+;;
+;;
+GTLINE:         data.w DOCOL
+                  data.w SCR
+                  data.w AT
+                  data.w PLINE
+                  data.w OVER
+                  data.w SWAP
+                  data.w BLANKS
+                  data.w ZERO
+                  data.w FWORD
+                  data.w HERE
+                  data.w COUNT
+                  data.w CLIT
+                  data.b $40
+                  data.w MIN
+                  data.w ROT
+                  data.w SWAP
+                  data.w CMOVE
+                  data.w UPDATE
+                  data.w SEMIS
+;;
+;;    MESSAGE
+;;
+_FMESSAGE             text.7 $87, "MESSAGE"
+                  data.w _GTLINE    ; link to >LINE
+                  data.w FMESSAGE+2    ; PFAPTR
+;;
+;;
+;;
+FMESSAGE:         data.w DOCOL
+                  data.w DDUP
+                  data.w ZBRAN
+                  data.w $0014
+                  data.w WARNING
+                  data.w AT
+                  data.w ZBRAN
+                  data.w $000e
+                  data.w FOUR
+                  data.w OFFSET
+                  data.w AT
+                  data.w SUB
+                  data.w DOTLINE
+                  data.w SEMIS
+                  data.w DUP
+                  data.w ONE
+                  data.w EQUAL
+                  data.w ZBRAN
+                  data.w $0014
+                  data.w DROP
+                  data.w PDOTQ
+                  data.b $0b, "STACK EMPTY"
+                  data.w SEMIS
+                  data.w PDOTQ
+                  data.b $05, "MSG# "
+                  data.w BASE
+                  data.w AT
+                  data.w DECIMAL
+                  data.w SWAP
+                  data.w DOT
+                  data.w BASE
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    LOAD
+;;
+_LOAD             text.7 $84, "LOAD"
+                  data.w _FMESSAGE    ; link to MESSAGE
+                  data.w LOAD+2    ; PFAPTR
+;;
+;;
+;;
+LOAD:         data.w DOCOL
+                  data.w BLK
+                  data.w AT
+                  data.w GTR
+                  data.w IN
+                  data.w AT
+                  data.w GTR
+                  data.w ZERO
+                  data.w IN
+                  data.w STORE
+                  data.w BLK
+                  data.w STORE
+                  data.w INTERPRET
+                  data.w RFROM
+                  data.w IN
+                  data.w STORE
+                  data.w RFROM
+                  data.w BLK
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    -->
+;;
+_ARROW             text.7 $c3, "-->"
+                  data.w _LOAD    ; link to LOAD
+                  data.w ARROW+2    ; PFAPTR
+;;
+;;
+;;
+ARROW:         data.w DOCOL
+                  data.w BLK
+                  data.w AT
+                  data.w ZEQ
+                  data.w CLIT
+                  data.b $16
+                  data.w QERROR
+                  data.w ZERO
+                  data.w IN
+                  data.w STORE
+                  data.w ONE
+                  data.w BLK
+                  data.w PSTORE
+                  data.w SEMIS
+;;
+;;    -BCD
+;;
+_SUBBCD             text.7 $84, "-BCD"
+                  data.w _ARROW    ; link to -->
+                  data.w SUBBCD+2    ; PFAPTR
+;;
+;;
+;;
+SUBBCD:         data.w DOCOL
+                  data.w ZERO
+                  data.w CLIT
+                  data.b $0a
+                  data.w USLAS
+                  data.w CLIT
+                  data.b $10
+                  data.w MUL
+                  data.w OR
+                  data.w SEMIS
+;;
+;;    B/BUF
+;;
+_BBUF             text.7 $85, "B/BUF"
+                  data.w _SUBBCD    ; link to -BCD
+                  data.w BBUF+2    ; PFAPTR
+;;
+;;
+;;
+BBUF:         data.w DOCON
+                  data.w $0400
+;;
+;;    B/SCR
+;;
+_BSCR             text.7 $85, "B/SCR"
+                  data.w _BBUF    ; link to B/BUF
+                  data.w BSCR+2    ; PFAPTR
+;;
+;;
+;;
+BSCR:         data.w DOCON
+                  data.w $0001
+;;
+;;    R/W
+;;
+_RW             text.7 $83, "R/W"
+                  data.w _BSCR    ; link to B/SCR
+                  data.w RW+2    ; PFAPTR
+;;
+;;
+;;
+RW:         data.w DOCOL
+                  data.w URW
+                  data.w AT
+                  data.w EXECUTE
+                  data.w SEMIS
+;;
+;;    DISK
+;;
+_DISK             text.7 $84, "DISK"
+                  data.w _RW    ; link to R/W
+                  data.w DISK+2    ; PFAPTR
+;;
+;;    SELECT
+;;
+_SELECT             text.7 $86, "SELECT"
+                  data.w _DISK    ; link to DISK
+                  data.w SELECT+2    ; PFAPTR
+;;
+;;    DREAD
+;;
+_DREAD             text.7 $85, "DREAD"
+                  data.w _SELECT    ; link to SELECT
+                  data.w DREAD+2    ; PFAPTR
+;;
+;;    DWRITE
+;;
+_DWRITE             text.7 $86, "DWRITE"
+                  data.w _DREAD    ; link to DREAD
+                  data.w DWRITE+2    ; PFAPTR
+;;
+;;    INIT
+;;
+_INIT             text.7 $84, "INIT"
+                  data.w _DWRITE    ; link to DWRITE
+                  data.w INIT+2    ; PFAPTR
+;;
+;;    SEEK
+;;
+_SEEK             text.7 $84, "SEEK"
+                  data.w _INIT    ; link to INIT
+                  data.w SEEK+2    ; PFAPTR
+;;
+;;    '
+;;
+_TICK             text.7 $c1, "'"
+                  data.w _SEEK    ; link to SEEK
+                  data.w TICK+2    ; PFAPTR
+;;
+;;
+;;
+TICK:         data.w DOCOL
+                  data.w SUBFIND
+                  data.w ZEQ
+                  data.w ZERO
+                  data.w QERROR
+                  data.w DROP
+                  data.w LITERAL
+                  data.w SEMIS
+;;
+;;    H/C
+;;
+_HC             text.7 $83, "H/C"
+                  data.w _TICK    ; link to '
+                  data.w HC+2    ; PFAPTR
+;;
+;;
+;;
+HC:         data.w DOCOL
+                  data.w ONE
+                  data.w HEADERLESS
+                  data.w STORE
+                  data.w DUP
+                  data.w DPDIV
+                  data.w STORE
+                  data.w CR
+                  data.w PDOTQ
+                  data.b $06, "HEADS/"
+                  data.w DOT
+                  data.w CR
+                  data.w PDOTQ
+                  data.b $06, "CODES/"
+                  data.w HERE
+                  data.w DOT
+                  data.w SEMIS
+;;
+;;    HWORD
+;;
+_HWORD             text.7 $85, "HWORD"
+                  data.w _HC    ; link to H/C
+                  data.w HWORD+2    ; PFAPTR
+;;
+;;
+;;
+HWORD:         data.w DOCOL
+                  data.w HEADERLESS
+                  data.w AT
+                  data.w ZBRAN
+                  data.w $003e
+                  data.w LATEST
+                  data.w PFAPTR
+                  data.w CFA
+                  data.w DUP
+                  data.w AT
+                  data.w OVER
+                  data.w TWOPLUS
+                  data.w EQUAL
+                  data.w ZBRAN
+                  data.w $000a
+                  data.w HEREDIV
+                  data.w TWOPLUS
+                  data.w OVER
+                  data.w STORE
+                  data.w HERE
+                  data.w OVER
+                  data.w DUP
+                  data.w DP
+                  data.w STORE
+                  data.w SUB
+                  data.w HEREDIV
+                  data.w TWOPLUS
+                  data.w HEREDIV
+                  data.w TWOMINUS
+                  data.w STORE
+                  data.w HEREDIV
+                  data.w SWAP
+                  data.w DUP
+                  data.w ALLOTDIV
+                  data.w CMOVE
+                  data.w SEMIS
+;;
+;;    ?KERNEL
+;;
+_QKERNEL             text.7 $87, "?KERNEL"
+                  data.w _HWORD    ; link to HWORD
+                  data.w QKERNEL+2    ; PFAPTR
+;;
+;;
+;;
+QKERNEL:         data.w DOCOL
+                  data.w TICK
+                  data.w CFA
+                  data.w LIT
+                  data.w INITTAB
+                  data.w ULESS
+                  data.w ZBRAN
+                  data.w $0011
+                  data.w PDOTQ
+                  data.b $08, "OUTSIDE "
+                  data.w BRAN
+                  data.w $000c
+                  data.w PDOTQ
+                  data.b $07, "INSIDE "
+                  data.w SEMIS
+;;
+;;    AUTOSTART
+;;
+_AUTOSTART             text.7 $89, "AUTOSTART"
+                  data.w _QKERNEL    ; link to ?KERNEL
+                  data.w AUTOSTART+2    ; PFAPTR
+;;
+;;
+;;
+AUTOSTART:         data.w DOCOL
+                  data.w TICK
+                  data.w AT
+                  data.w DUP
+                  data.w LIT
+                  data.w FX+2
+                  data.w EQUAL
+                  data.w ZBRAN
+                  data.w $0011
+                  data.w PDOTQ
+                  data.b $0a, "NAME ERROR"
+                  data.w QUIT
+                  data.w OVER
+                  data.w TWOPLUS
+                  data.w STORE
+                  data.w LIT
+                  data.w $a55a
+                  data.w SWAP
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    FORGET
+;;
+_FORGET             text.7 $86, "FORGET"
+                  data.w _AUTOSTART    ; link to AUTOSTART
+                  data.w FORGET+2    ; PFAPTR
+;;
+;;
+;;
+FORGET:         data.w DOCOL
+                  data.w TICK
+                  data.w NFA
+                  data.w DUP
+                  data.w $d1fe
+                  data.w SWAP
+                  data.w FENCE
+                  data.w AT
+                  data.w ULESS
+                  data.w OR
+                  data.w CLIT
+                  data.b $15
+                  data.w QERROR
+                  data.w GTR
+                  data.w VOCL
+                  data.w AT
+                  data.w R
+                  data.w OVER
+                  data.w ULESS
+                  data.w ZBRAN
+                  data.w $0012
+                  data.w FORTH
+                  data.w DEFINITIONS
+                  data.w AT
+                  data.w DUP
+                  data.w VOCL
+                  data.w STORE
+                  data.w BRAN
+                  data.w $ffe8
+                  data.w DUP
+                  data.w FOUR
+                  data.w SUB
+                  data.w PFAPTR
+                  data.w LFA
+                  data.w AT
+                  data.w DUP
+                  data.w $d1fe
+                  data.w SWAP
+                  data.w R
+                  data.w ULESS
+                  data.w OR
+                  data.w ZBRAN
+                  data.w $ffec
+                  data.w OVER
+                  data.w TWOMINUS
+                  data.w STORE
+                  data.w AT
+                  data.w DDUP
+                  data.w ZEQ
+                  data.w ZBRAN
+                  data.w $ffd6
+                  data.w RFROM
+                  data.w DUP
+                  data.w PFAPTR
+                  data.w CFA
+                  data.w DP
+                  data.w STORE
+                  data.w DPDIV
+                  data.w STORE
+                  data.w SEMIS
+                  data.w DOCOL
+                  data.w LIT
+                  data.w UNKNOWN
+                  data.w OVER
+                  data.w ULESS
+                  data.w OVER
+                  data.w LIT
+                  data.w PADDINGD
+                  data.w ULESS
+                  data.w ANDD
+                  data.w SEMIS
+
+UNK7:			  data.w DOCOL
+                  data.w HERE
+                  data.w SUB
+                  data.w COMMA
+                  data.w SEMIS
+;;
+;;    BEGIN
+;;
+_BEGIN             text.7 $c5, "BEGIN"
+                  data.w _FORGET    ; link to FORGET
+                  data.w BEGIN+2    ; PFAPTR
+;;
+;;
+;;
+BEGIN:         data.w DOCOL
+                  data.w QCOMP
+                  data.w HERE
+                  data.w ONE
+                  data.w SEMIS
+;;
+;;    ENDIF
+;;
+_FENDIF             text.7 $c5, "ENDIF"
+                  data.w _BEGIN    ; link to BEGIN
+                  data.w FENDIF+2    ; PFAPTR
+;;
+;;
+;;
+FENDIF:         data.w DOCOL
+                  data.w QCOMP
+                  data.w TWO
+                  data.w QPAIRS
+                  data.w HERE
+                  data.w OVER
+                  data.w SUB
+                  data.w SWAP
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    THEN
+;;
+_FTHEN             text.7 $c4, "THEN"
+                  data.w _FENDIF    ; link to ENDIF
+                  data.w FTHEN+2    ; PFAPTR
+;;
+;;
+;;
+FTHEN:         data.w DOCOL
+                  data.w FENDIF
+                  data.w SEMIS
+;;
+;;    DO
+;;
+_FDO             text.7 $c2, "DO"
+                  data.w _FTHEN    ; link to THEN
+                  data.w FDO+2    ; PFAPTR
+;;
+;;
+;;
+FDO:         data.w DOCOL
+                  data.w COMPILE
+                  data.w DO
+                  data.w HERE
+                  data.w THREE
+                  data.w SEMIS
+;;
+;;    LOOP
+;;
+_LOOP             text.7 $c4, "LOOP"
+                  data.w _FDO    ; link to DO
+                  data.w DLOOP+2    ; PFAPTR
+;;
+;;
+;;
+DLOOP:         data.w DOCOL
+                  data.w THREE
+                  data.w QPAIRS
+                  data.w COMPILE
+                  data.w LOOP
+                  data.w UNK7
+                  data.w SEMIS
+;;
+;;    +LOOP
+;;
+_PLOOP             text.7 $c5, "+LOOP"
+                  data.w _LOOP    ; link to LOOP
+                  data.w DPLOOP+2    ; PFAPTR
+;;
+;;
+;;
+DPLOOP:         data.w DOCOL
+                  data.w THREE
+                  data.w QPAIRS
+                  data.w COMPILE
+                  data.w PLOOP
+                  data.w $d214
+                  data.w SEMIS
+;;
+;;    UNTIL
+;;
+_FUNTIL             text.7 $c5, "UNTIL"
+                  data.w _PLOOP    ; link to +LOOP
+                  data.w FUNTIL+2    ; PFAPTR
+;;
+;;
+;;
+FUNTIL:         data.w DOCOL
+                  data.w ONE
+                  data.w QPAIRS
+                  data.w COMPILE
+                  data.w ZBRAN
+                  data.w $d214
+                  data.w SEMIS
+;;
+;;    END
+;;
+_FEND             text.7 $c3, "END"
+                  data.w _FUNTIL    ; link to UNTIL
+                  data.w FEND+2    ; PFAPTR
+;;
+;;
+;;
+FEND:         data.w DOCOL
+                  data.w FUNTIL
+                  data.w SEMIS
+;;
+;;    AGAIN
+;;
+_FAGAIN             text.7 $c5, "AGAIN"
+                  data.w _FEND    ; link to END
+                  data.w FAGAIN+2    ; PFAPTR
+;;
+;;
+;;
+FAGAIN:         data.w DOCOL
+                  data.w ONE
+                  data.w QPAIRS
+                  data.w COMPILE
+                  data.w BRAN
+                  data.w $d214
+                  data.w SEMIS
+;;
+;;    REPEAT
+;;
+_FREPEAT             text.7 $c6, "REPEAT"
+                  data.w _FAGAIN    ; link to AGAIN
+                  data.w FREPEAT+2    ; PFAPTR
+;;
+;;
+;;
+FREPEAT:         data.w DOCOL
+                  data.w GTR
+                  data.w GTR
+                  data.w FAGAIN
+                  data.w RFROM
+                  data.w RFROM
+                  data.w TWOMINUS
+                  data.w FENDIF
+                  data.w SEMIS
+;;
+;;    IF
+;;
+_FIF             text.7 $c2, "IF"
+                  data.w _FREPEAT    ; link to REPEAT
+                  data.w FIF+2    ; PFAPTR
+;;
+;;
+;;
+FIF:         data.w DOCOL
+                  data.w COMPILE
+                  data.w ZBRAN
+                  data.w $c577
+                  data.w ZERO
+                  data.w COMMA
+                  data.w TWO
+                  data.w SEMIS
+;;
+;;    ELSE
+;;
+_FELSE             text.7 $c4, "ELSE"
+                  data.w _FIF    ; link to IF
+                  data.w FELSE+2    ; PFAPTR
+;;
+;;
+;;
+FELSE:         data.w DOCOL
+                  data.w TWO
+                  data.w QPAIRS
+                  data.w COMPILE
+                  data.w BRAN
+                  data.w $c577
+                  data.w ZERO
+                  data.w COMMA
+                  data.w SWAP
+                  data.w TWO
+                  data.w FENDIF
+                  data.w TWO
+                  data.w SEMIS
+;;
+;;    WHILE
+;;
+_FWHILE             text.7 $c5, "WHILE"
+                  data.w _FELSE    ; link to ELSE
+                  data.w FWHILE+2    ; PFAPTR
+;;
+;;
+;;
+FWHILE:         data.w DOCOL
+                  data.w FIF
+                  data.w TWOPLUS
+                  data.w SEMIS
+;;
+;;    SPACES
+;;
+_SPACES             text.7 $86, "SPACES"
+                  data.w _FWHILE    ; link to WHILE
+                  data.w SPACES+2    ; PFAPTR
+;;
+;;    <#
+;;
+_LTNUM             text.7 $82, "<#"
+                  data.w _SPACES    ; link to SPACES
+                  data.w LEQ+2    ; PFAPTR
+;;
+;;    #>
+;;
+_NUMGT             text.7 $82, "#>"
+                  data.w _LTNUM    ; link to <#
+                  data.w HASHGT+2    ; PFAPTR
+;;
+;;    SIGN
+;;
+_SIGN             text.7 $84, "SIGN"
+                  data.w _NUMGT    ; link to #>
+                  data.w SIGN+2    ; PFAPTR
+;;
+;;    #
+;;
+_NUM             text.7 $81, "#"
+                  data.w _SIGN    ; link to SIGN
+                  data.w DIG+2    ; PFAPTR
+;;
+;;    #S
+;;
+_NUMS             text.7 $82, "#S"
+                  data.w _NUM    ; link to #
+                  data.w HASHS+2    ; PFAPTR
+;;
+;;    D.R
+;;
+_DDOTR             text.7 $83, "D.R"
+                  data.w _NUMS    ; link to #S
+                  data.w DDOTR+2    ; PFAPTR
+;;
+;;    D.
+;;
+_DDOT             text.7 $82, "D."
+                  data.w _DDOTR    ; link to D.R
+                  data.w DDOT+2    ; PFAPTR
+;;
+;;    .R
+;;
+_DOTR             text.7 $82, ".R"
+                  data.w _DDOT    ; link to D.
+                  data.w DOTR+2    ; PFAPTR
+;;
+;;    .
+;;
+_DOT             text.7 $81, "."
+                  data.w _DOTR    ; link to .R
+                  data.w DOT+2    ; PFAPTR
+;;
+;;    ?
+;;
+_Q             text.7 $81, "?"
+                  data.w _DOT    ; link to .
+                  data.w Q+2    ; PFAPTR
+;;
+;;    LIST
+;;
+_FLIST             text.7 $84, "LIST"
+                  data.w _Q    ; link to ?
+                  data.w FLIST+2    ; PFAPTR
+
+FLIST:         data.w DOCOL
+                  data.w BASE
+                  data.w AT
+                  data.w SWAP
+                  data.w DECIMAL
+                  data.w CR
+                  data.w DUP
+                  data.w SCR
+                  data.w STORE
+                  data.w PDOTQ
+                  data.b $06, "SCR # "
+                  data.w DOT
+                  data.w CLIT
+                  data.b $10
+                  data.w ZERO
+                  data.w DO
+                  data.w CR
+                  data.w I
+                  data.w THREE
+                  data.w DOTR
+                  data.w SPACE
+                  data.w I
+                  data.w SCR
+                  data.w AT
+                  data.w DOTLINE
+                  data.w LOOP
+                  data.w $ffec
+                  data.w BASE
+                  data.w STORE
+                  data.w CR
+                  data.w SEMIS
+;;
+;;    INDEX
+;;
+_INDEX             text.7 $85, "INDEX"
+                  data.w _FLIST    ; link to LIST
+                  data.w INDEX+2    ; PFAPTR
+;;
+;;
+;;
+INDEX:          data.w DOCOL
+    			data.w CR
+    			data.w ONEPLUS
+    			data.w SWAP
+    			data.w DO
+    			data.w CR
+    			data.w I
+    			data.w THREE
+    			data.w DOTR
+    			data.w SPACE
+    			data.w ZERO
+    			data.w I
+    			data.w DOTLINE
+    			data.w QTERM
+    			data.w ZBRAN
+    			data.w $0004
+    			data.w LEAVE
+    			data.w LOOP
+    			data.w $ffe6
+
+FORMFEED:		data.w PDOTQ
+    			data.b $01, ""
+    			data.w SEMIS
+
+INDEX1:			data.w DOCOL
+    			data.w PFAPTR
+    			data.w LFA
+    			data.w AT
+    			data.w DUP
+    			data.w ZEQ
+    			data.w QTERM
+    			data.w OR
+    			data.w ZEQ
+    			data.w SEMIS
+
+INDEX2:			data.w DOCOL
+    			data.w DUP
+    			data.w TWODUP
+    			data.w PFAPTR
+    			data.w ZERO
+    			data.w CLIT
+    			data.b $05
+    			data.w DDOTR
+    			data.w SPACE
+    			data.w ID
+    			data.w CLIT
+    			data.b $0c
+    			data.w ROT
+    			data.w CAT
+    			data.w CLIT
+    			data.b $1f
+    			data.w ANDD
+    			data.w SUB
+    			data.w SPACES
+    			data.w SEMIS
+;;
+;;    VLIST
+;;
+_VLIST             text.7 $85, "VLIST"
+                  data.w _INDEX    ; link to INDEX
+                  data.w VLIST+2    ; PFAPTR
+;;
+;;
+;;
+VLIST:         data.w DOCOL
+                  data.w BASE
+                  data.w AT
+                  data.w HEX
+                  data.w CR
+                  data.w CONTEXT
+                  data.w AT
+                  data.w AT
+                  data.w INDEX2
+                  data.w INDEX1
+                  data.w ZBRAN
+                  data.w $001e
+                  data.w INDEX2
+                  data.w INDEX1
+                  data.w ZBRAN
+                  data.w $0016
+                  data.w INDEX2
+                  data.w INDEX1
+                  data.w ZBRAN
+                  data.w $000e
+                  data.w INDEX2
+                  data.w CR
+                  data.w INDEX1
+                  data.w ZEQ
+                  data.w ZBRAN
+                  data.w $ffde
+                  data.w DROP
+                  data.w BASE
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    MON
+;;
+_MON             text.7 $83, "MON"
+                  data.w _VLIST    ; link to VLIST
+                  data.w MON+2    ; PFAPTR
+;;
+;;
+;;
+MON:         data.w DOCOL
+                  data.w MMON
+                  data.w SEMIS
+;;
+;;    .S
+;;
+_DOTS             text.7 $82, ".S"
+                  data.w _MON    ; link to MON
+                  data.w DOTS+2    ; PFAPTR
+;;
+;;
+;;
+DOTS:         data.w DOCOL
+                  data.w SZ
+                  data.w AT
+                  data.w SPAT
+                  data.w SUB
+                  data.w TWO
+                  data.w DIV_
+                  data.w DUP
+                  data.w ONE
+                  data.w GT
+                  data.w ZBRAN
+                  data.w $0014
+                  data.w ONE
+                  data.w DO
+                  data.w I
+                  data.w PICK
+                  data.w CR
+                  data.w DOT
+                  data.w LOOP
+                  data.w $fff6
+                  data.w SEMIS
+                  data.w CR
+                  data.w PDOTQ
+                  data.b $06, "EMPTY "
+                  data.w DROP
+                  data.w SEMIS
+;;
+;;    C,CON
+;;
+_CCON             text.7 $85, "C,CON"
+                  data.w _DOTS    ; link to .S
+                  data.w CCON+2    ; PFAPTR
+;;
+;;
+;;
+CCON:       data.w DOCOL
+    		data.w LTBUILDS
+    		data.w CCOMMA
+    		data.w IMMEDIATE
+    		data.w DOESGT
+L3375:		data.w CAT
+			data.w STATE
+    		data.w AT
+    		data.w ZBRAN
+    		data.w $000a
+    		data.w LIT
+    		data.w CLIT
+    		data.w COMMA
+			data.w CCOMMA
+			data.w SEMIS
+	
+_DINTFLG	text.7 $c6, "INTFLG"
+			data.w _CCON
+			data.w DINTFLG+2
+	
+DINTFLG:	data.w DOES
+			data.w L3375
+			data.b $4a
+
+_FINTVEC:	text.7 $c6, "INTVEC"
+			data.w _DINTFLG
+			data.w FINTVEC+2
+
+FINTVEC:	data.w DOES
+			data.w L3375
+			data.b $5b
+
+_FIRQVEC:	text.7 $c6, "IRQVEC"
+			data.w _FINTVEC
+			data.w FIRQVEC+2
+
+FIRQVEC:	data.w DOES
+			data.w L3375
+			data.b $5b
+
+_FNMIVEC:	text.7 $c6, "NMIVEC"
+			data.w _FIRQVEC
+			data.w FNMIVEC+2
+
+FNMIVEC:	data.w DOES
+			data.w L3375
+			data.b $42
+
+_DPA		text.7 $c2, "PA"
+			data.w _FNMIVEC
+			data.w DPA+2
+
+DPA:		data.w DOES
+			data.w L3375
+			data.b PortA
+
+_DPB		text.7 $c2, "PB"
+			data.w _DPA
+			data.w DPB+2
+
+DPB:		data.w DOES
+			data.w L3375
+			data.b PortB
+
+_DPC		text.7 $c2, "PC"
+			data.w _DPB
+			data.w DPC+2
+
+DPC:		data.w DOES
+			data.w L3375
+			data.b PortC
+
+_DPD		text.7 $c2, "PD"
+			data.w _DPC
+			data.w DPD+2
+
+DPD:		data.w DOES
+			data.w L3375
+			data.b PortD
+
+_DPE		text.7 $c2, "PE"
+			data.w _DPD
+			data.w DPE+2
+
+DPE:		data.w DOES
+			data.w L3375
+			data.b PortE
+
+_DPF		text.7 $c2, "PF"
+			data.w _DPE
+			data.w DPF+2
+
+DPF:		data.w DOES
+			data.w L3375
+			data.b PortF
+
+_DPG		text.7 $c2, "PG"
+			data.w _DPF
+			data.w DPG+2
+
+DPG:		data.w DOES
+			data.w L3375
+			data.b PortG
+	
+_DIFR		text.7 $c3, "IFR"
+			data.w _DPG
+			data.w DIFR+2
+
+DIFR:		data.w DOES
+			data.w L3375
+			data.b IFR
+
+_DIER		text.7 $c3, "IER"
+			data.w _DIFR
+			data.w DIER+2
+
+DIER:		data.w DOES
+			data.w L3375
+			data.b IER
+
+_DMCR		text.7 $c3, "MCR"
+			data.w _DIER
+			data.w DMCR+2
+
+DMCR:		data.w DOES
+			data.w L3375
+			data.b MCR
+
+_DSCCR		text.7 $c4, "SCCR"
+			data.w _DMCR
+			data.w DSCCR+2
+
+DSCCR:		data.w DOES
+			data.w L3375
+			data.b SCCR
+
+_DSCSR		text.7 $c4, "SCSR"
+			data.w _DSCCR
+			data.w DSCSR+2
+
+DSCSR:		data.w DOES
+			data.w L3375
+			data.b SCSR
+
+;;
+;;    SCDR
+;;
+_DSCDR       text.7 $c4, "SCDR"
+    		data.w _DSCSR    ; link to C,CON
+    		data.w DSCDR+2    ; PFAPTR
+;;
+;;
+;;
+DSCDR:      data.w DOES
+    		data.w L3375
+    		data.b $17
+
+;;
+;;    MEMTOP
+;;
+_MEMTOP         text.7 $86, "MEMTOP"
+    			data.w _DSCDR    ; link to SCDR
+    			data.w MEMTOP+2    ; PFAPTR
+				data.b $db
+;;
+;;
+;;
+MEMTOP:         data.w DOCOL
+    			data.w DUP
+    			data.w ULIMIT
+    			data.w STORE
+    			data.w LIT
+    			data.w $0808
+    			data.w SUB
+    			data.w UFIRST
+    			data.w STORE
+    			data.w EMPTYBUFFERS
+    			data.w SEMIS
+;;
+;;    CASE:
+;;
+_CASE           text.7 $85, "CASE:"
+    			data.w _MEMTOP    ; link to MEMTOP
+    			data.w CASE+2     ; PFAPTR
+
+CASE:         	data.w DOCOL
+    			data.w LTBUILDS
+    			data.w SMUDGE
+    			data.w STORCSP
+    			data.w RBRAC
+    			data.w LIT
+    			data.w $ff87
+    			data.w HERE
+    			data.w TWOMINUS
+    			data.w STORE
+    			data.w LIT
+    			data.w DOES
+    			data.w DCSTOR
+;;
+;;    EEC!
+;;
+_EECSTOR        text.7 $84, "EEC!"
+    			data.w _CASE    ; link to CASE:
+    			data.w EECSTORE+2    ; PFAPTR
+;;
+;;    BANKC!
+;;
+_BANKCSTOR      text.7 $86, "BANKC!"
+    			data.w _EECSTOR    ; link to EEC!
+    			data.w BANKCSTOR+2    ; PFAPTR
+;;
+;;    BANKC@
+;;
+_BANKCAT        text.7 $86, "BANKC@"
+    			data.w _BANKCSTOR    ; link to BANKC!
+    			data.w BANKCAT+2    ; PFAPTR
+;;
+;;    BANKEEC!
+;;
+_BANKEECSTOR    text.7 $88, "BANKEEC!"
+    			data.w _BANKCAT    ; link to BANKC@
+    			data.w BANKEECS+2    ; PFAPTR
+;;
+;;    BANKEXECUTE
+;;
+_BANKEXECUTE    text.7 $8b, "BANKEXECUTE"
+    			data.w _BANKEECSTOR    ; link to BANKEEC!
+    			data.w BANKEXEC+2    ; PFAPTR
+
+if machine == machine_65C816 {
+
+_PSET:			text.7 $84, "PSET"
+				data.w _BANKEXECUTE
+				data.w PSET+2
+	(*
+
+	func pset(x, y) {
+
+	// Calc byte to AND
+	andval = 0x01				;
+	loopval = xlo & 0x07
+	while loopval > 0
+	  lsl andval
+	  loopval--
+	Store it in N+x
+	
+
+	}
+
+	0 01  0000 0000 -> 0000 0001 
+	1 02  0000 0001 -> 0000 0010
+	2 04  0000 0010 -> 0000 0100
+	3 08  0000 0011 -> 0000 1000
+	4 10  0000 0100 -> 0001 0000
+	5 20  0000 0101 -> 0010 0000
+	6 40  0000 0110 -> 0100 0000
+	7 80  0000 0111 -> 1000 0000
+	
+	
+	*)
+
+	(*
+	N	byte address
+	N+2	byte mask
+	*)
+PSET:			data.w PSET+2
+
+	;; Calculate byte value and store in N+2
+				LDA 2,x			; x low byte
+				AND #$07
+				TAY
+				INY
+				LDA #0
+				SEC
+L3640			ROR
+				DEY
+				CPY #0
+				BNE L3640
+				STA N+2
+
+	;; Calculate address
+				REP #$20
+				LONGA on
+
+				LDA 0,x			; Move x to N	
+				LDY #06			; Multiply x by 64
+L3658			ASL
+				DEY
+				CPY #0
+				BNE L3658
+				STA N			; Temp
+
+				LDA 0,x			; Multiply by 16
+				LDY #04
+L3666			ASL
+				DEY
+				CPY #0
+				BNE L3666
+
+				CLC
+				ADC N			; And add together to get * 80
+				STA N
+
+				LDA 2,x
+				LSR
+				LSR
+				LSR
+				ADC N
+	
+				STX XSAVE
+				REP #$30
+				LONGI on
+				TAX
+
+				SEP #$20
+				LONGA off
+	
+				LDA $fd0000,x
+				ORA N+2
+				STA $fd0000,x
+
+				SEP #$30
+				LONGI off
+				LDX XSAVE
+				JMP POPTWO
+
+PCLR:		
+}
+	
+;;
+;;    FMTRK
+;;
+_FMTRK          text.7 $85, "FMTRK"
+    			data.w _PSET           ; link to BANKEXECUTE
+    			data.w FMTRK+2         ; PFAPTR
+;;
+;;
+;;
+FMTRK:         	data.w FMTRK+2
+    			TXA 
+    			PHA 
+    			LDA #$02
+    			JSR SETUP
+    			LDA #$f4
+    			LDY #$01
+    			STA DSK_STATUS
+    			LDX #$31
+    			LDA #$4e
+.L3648 			BIT DSK_CTL
+    			BVS .L3648
+    			STA DSK_DATA
+    			DEX 
+    			BNE .L3648
+.L3653 			BIT DSK_CTL
+    			BVS .L3653
+    			STA DSK_DATA
+    			LDX #$0b
+    			LDA #$00
+.L3658 			BIT DSK_CTL
+    			BVS .L3658
+    			STA DSK_DATA
+    			DEX 
+    			BNE .L3658
+.L3663 			BIT DSK_CTL
+    			BVS .L3663
+    			STA DSK_DATA
+    			LDX #$02
+    			LDA #$f5
+    			BIT DSK_CTL
+    			BVS $d6c2
+    			STA DSK_DATA
+    			DEX 
+    			BNE $d6c2
+    			BIT DSK_CTL
+    			BVS $d6cd
+    			STA DSK_DATA
+    			LDA #$fe
+    			BIT DSK_CTL
+    			BVS $d6d7
+    			STA DSK_DATA
+    			LDA N
+    			BIT DSK_CTL
+    			BVS $d6e1
+    			STA DSK_DATA
+    			LDA N+2
+    			BIT DSK_CTL
+    			BVS $d6eb
+    			STA DSK_DATA
+    			BIT DSK_CTL
+    			BVS $d6f3
+    			STY DSK_DATA
+    			LDA #$01
+    			BIT DSK_CTL
+    			BVS $d6fd
+    			STA DSK_DATA
+    			LDA #$f7
+    			BIT DSK_CTL
+    			BVS $d707
+    			STA DSK_DATA
+    			LDX #$15
+    			LDA #$4e
+    			BIT DSK_CTL
+    			BVS $d713
+    			STA DSK_DATA
+    			DEX 
+    			BNE $d713
+    			BIT DSK_CTL
+    			BVS $d71e
+    			STA DSK_DATA
+    			LDX #$0b
+    			LDA #$00
+    			BIT DSK_CTL
+    			BVS $d72a
+    			STA DSK_DATA
+    			DEX 
+    			BNE $d72a
+    			BIT DSK_CTL
+    			BVS $d735
+    			STA DSK_DATA
+    			LDX #$02
+    			LDA #$f5
+    			BIT DSK_CTL
+    			BVS $d741
+    			STA DSK_DATA
+    			DEX 
+    			BNE $d741
+    			BIT DSK_CTL
+    			BVS $d74c
+    			STA DSK_DATA
+    			LDX #$ff
+    			LDA #$fb
+    			BIT DSK_CTL
+    			BVS $d758
+    			STA DSK_DATA
+    			LDA #$20
+    			BIT DSK_CTL
+    			BVS $d762
+    			STA DSK_DATA
+    			DEX 
+    			BNE $d762
+    			BIT DSK_CTL
+    			BVS $d76d
+    			STA DSK_DATA
+    			LDA #$f7
+    			BIT DSK_CTL
+    			BVS $d777
+    			STA DSK_DATA
+    			LDX #$35
+    			LDA #$4e
+    			BIT DSK_CTL
+    			BVS $d783
+    			STA DSK_DATA
+    			DEX 
+    			BNE $d783
+    			BIT DSK_CTL
+    			BVS $d78e
+    			STA DSK_DATA
+    			INY 
+    			CPY #$11
+    			BEQ $d7b2
+    			BIT DSK_CTL
+    			BVS $d79b
+    			STX DSK_DATA
+    			LDX #$09
+    			LDA #$00
+    			BIT DSK_CTL
+    			BVS $d7a7
+    			STA DSK_DATA
+    			JMP $d6ab
+    			LDY #$4e
+    			BIT DSK_CTL
+    			BVS $d7b4
+    			BPL $d7c1
+    			STY DSK_DATA
+    			JMP $d7b4
+    			PLA 
+    			TAX 
+    			JMP POPTWO
+;;
+;;    FORMAT
+;;
+_FORMAT         text.7 $86, "FORMAT"
+    			data.w _FMTRK      ; link to FMTRK
+    			data.w FORMAT+2    ; PFAPTR
+;;
+;;
+;;
+FORMAT:         data.w DOCOL
+    			data.w TWO
+    			data.w MUL
+                  data.w SWAP
+                  data.w ZERO
+                  data.w DO
+                  data.w DUP
+                  data.w ONEPLUS
+                  data.w SELECT
+                  data.w R
+                  data.w SEEK
+                  data.w ONE
+                  data.w R
+                  data.w FMTRK
+                  data.w DUP
+                  data.w SELECT
+                  data.w ZERO
+                  data.w R
+                  data.w FMTRK
+                  data.w LOOP
+                  data.w $ffe4
+                  data.w DROP
+                  data.w SEMIS
+;;
+;;    ;DUMP
+;;
+_DUMP             text.7 $85, ";DUMP"
+                  data.w _FORMAT    ; link to FORMAT
+                  data.w DUMP+2     ; PFAPTR
+;;
+;;
+;;
+DUMP:             data.w DOCOL
+                  data.w PDOTQ
+                  data.b $01, ";"
+                  data.w KHZ
+                  data.w AT
+                  data.w GTR
+                  data.w ZERO
+                  data.w KHZ
+                  data.w STORE
+                  data.w TWODUP
+                  data.w CODE2
+                  data.w CODE1
+                  data.w BOUNDS
+                  data.w DO
+                  data.w R
+                  data.w CAT
+                  data.w CODE2
+                  data.w LOOP
+                  data.w $fff8
+                  data.w KHZ
+                  data.w AT
+                  data.w CODE1
+                  data.w CR
+                  data.w RFROM
+                  data.w KHZ
+                  data.w STORE
+                  data.w SEMIS
+;;
+;;    ADMP
+;;
+_ADMP             text.7 $84, "ADMP"
+                  data.w _DUMP     ; link to ;DUMP
+                  data.w ADMP+2    ; PFAPTR
+
+ADMP:             data.w DOCOL
+                  data.w CR
+                  data.w ONE
+                  data.w GTR
+                  data.w TWODUP
+                  data.w ONEPLUS
+                  data.w SWAP
+                  data.w SUB
+                  data.w DDUP
+                  data.w ZBRAN
+                  data.w $001f
+                  data.w CLIT
+                  data.b $18
+                  data.w MIN
+                  data.w GTR
+                  data.w OVER
+                  data.w R
+                  data.w DUMP
+                  data.w SWAP
+                  data.w RFROM
+                  data.w PLUS
+                  data.w SWAP
+                  data.w RFROM
+                  data.w ONEPLUS
+                  data.w BRAN
+                  data.w $ffd5
+                  data.w RFROM
+                  data.w PDOTQ
+                  data.b $01, ";"
+                  data.w ZERO
+                  data.w CODE2
+                  data.w DUP
+                  data.w CODE1
+                  data.w CODE1
+                  data.w CR
+                  data.w TWODROP
+                  data.w SEMIS
+;;
+;;
+;;
+CODE1:         	data.w CODE1+2
+    			LDA 1,X
+    			JSR L3906
+    			JMP CODE2+2
+;;
+;;
+;;
+CODE2:         	data.w CODE2+2
+    			LDA 0,X
+    			JSR L3906
+    			JMP POP
+
+L3906:			PHA 
+    			LSR A
+    			LSR A
+    			LSR A
+    			LSR A
+    			JSR L3922
+    			PLA 
+    			PHA 
+    			CLC 
+    			ADC $0352
+    			STA $0352
+    			BCC $d8bb
+    			INC $0353
+    			PLA 
+    			AND #$0f
+L3922:			CLC 
+    			ADC #$30
+    			CMP #$3a
+    			BCC $d8c7
+    			ADC #$06
+    			JMP $f5ec
+
+NAMES:    		data.b "M REARDON R DUMSE", $00
+CRIGHT:   		data.b "COPYRIGHT 1983 ROCKWELL "
+	
+;;
+;;    N
+;;
+_N 	            text.7 $81, "N"
+    			data.w $0332    ; link to ADMP ToDo:
+    			data.w FN+2      ; PFAPTR
+
+FN:        		data.w DOCON
+    			data.w N
+;;
+;;    IP
+;;
+_IP             text.7 $82, "IP"
+    			data.w _N      ; link to N
+    			data.w FIP+2    ; PFAPTR
+
+FIP:         	data.w DOCON
+    			data.w IP
+;;
+;;    W
+;;
+_W             	text.7 $81, "W"
+    			data.w _IP    ; link to IP
+    			data.w FW+2    ; PFAPTR
+;;
+;;
+;;
+FW:         		data.w DOCON
+    			data.w W
+;;
+;;    UP
+;;
+_UP             text.7 $82, "UP"
+    			data.w _W   	  ; link to W
+    			data.w FUP+2      ; PFAPTR
+;;
+;;
+;;
+FUP:         	data.w DOCON
+    			data.w UP
+;;
+;;    XSAVE
+;;
+_XSAVE          text.7 $85, "XSAVE"
+    			data.w _UP    ; link to UP
+    			data.w DXSAVE+2    ; PFAPTR
+;;
+;;
+;;
+DXSAVE:        	data.w DOCON
+    			data.w XSAVE
+;;
+;;    NEXT
+;;
+_NEXT           text.7 $84, "NEXT"
+    			data.w _XSAVE    ; link to XSAVE
+    			data.w DNEXT+2    ; PFAPTR
+;;
+;;
+;;
+DNEXT:         	data.w DOCON
+    			data.w NEXT
+;;
+;;    PUSH
+;;
+_PUSH           text.7 $84, "PUSH"
+                data.w _NEXT    ; link to NEXT
+                data.w DPUSH+2    ; PFAPTR
+
+DPUSH:          data.w DOCON
+                data.w PUSH
+;;
+;;    PUT
+;;
+_PUT            text.7 $83, "PUT"
+    			data.w _PUSH    ; link to PUSH
+    			data.w DPUT+2    ; PFAPTR
+
+DPUT:           data.w DOCON
+    			data.w PUT_
+;;
+;;    POP
+;;
+_POP            text.7 $83, "POP"
+    			data.w _PUT    ; link to PUT
+    			data.w DPOP+2    ; PFAPTR
+;;
+;;
+;;
+DPOP:         	data.w DOCON
+    			data.w POP
+;;
+;;    POPTWO
+;;
+_POPTWO         text.7 $86, "POPTWO"
+                data.w _POP    ; link to POP
+                data.w DPOPTWO+2    ; PFAPTR
+;;
+;;
+;;
+DPOPTWO:        data.w DOCON
+                data.w POPTWO
+;;
+;;    PUSH0A
+;;
+_DPUSH0A        text.7 $86, "PUSH0A"
+                data.w _POPTWO    ; link to POPTWO
+                data.w DPUSH0A+2    ; PFAPTR
+
+DPUSH0A:        data.w DOCON
+                data.w PUSH0A
+;;
+;;    PUT0A
+;;
+_PUT0A          text.7 $85, "PUT0A"
+                data.w _DPUSH0A    ; link to PUSH0A
+                data.w DPUT0A+2    ; PFAPTR
+
+DPUT0A:         data.w DOCON
+                data.w L929
+;;
+;;    BINARY
+;;
+_BINARY           	text.7 $86, "BINARY"
+    				data.w _PUT0A    ; link to PUT0A
+    				data.w DBINARY+2    ; PFAPTR
+
+DBINARY:         	data.w DOCON
+    				data.w BINARY
+;;
+;;    SETUP
+;;
+_SETUP       		text.7 $85, "SETUP"
+    				data.w _BINARY    ; link to BINARY
+    				data.w DSETUP+2    ; PFAPTR
+
+DSETUP:        		data.w DOCON
+    				data.w SETUP
+	
+UNK1:         		data.b $09, $09, $05, $15, $15, $01, $11, $80
+					data.b $09, $80, $0d, $1d, $19, $80, $80, $80
+    				data.b $80, $00, $04, $14, $14, $80, $80, $80,
+					data.b $80, $80, $0c, $1c, $1c, $80, $80, $2c
+;;
+;;    SETMODE - assembler
+;;
+SETMODE:         	data.w CAT
+    				data.w MODE
+    				data.w STORE
+    				data.w SEMIS
+;;
+;;    .A
+;;
+_DOTA           text.7 $82, ".A"
+    			data.w _SETUP    ; link to SETUP
+    			data.w DOTA+2    ; PFAPTR
+
+DOTA:			data.w DOES
+    			data.w SETMODE
+				data.b $00
+;;
+;;    #
+;; 
+_DHASH:			text.7 $81, "#"
+				data.w _DOTA
+				data.w DHASH+2
+
+DHASH:			data.w DOES
+				data.w SETMODE
+				data.b $01
+
+;;
+;;    MEM
+;; 
+_MEM:			text.7 $83, "MEM"
+				data.w _DHASH
+				data.w MEM+2
+
+MEM:			data.w DOES
+				data.w SETMODE
+				data.b $02
+
+;;
+;;    ,X
+;; 
+_COMMAX:		text.7 $82, ",X"
+				data.w _MEM
+				data.w COMMAX+2
+
+COMMAX:			data.w DOES
+				data.w SETMODE
+				data.b $03
+
+;;
+;;    ,Y
+;; 
+_COMMAY			text.7 $82, ",Y"
+				data.w _COMMAX
+				data.w COMMAY+2
+
+COMMAY:			data.w DOES
+				data.w SETMODE
+				data.b $04
+
+;;
+;;    X)
+;;	
+_XBRAC:			text.7 $82, "X)"
+				data.w _COMMAY
+				data.w XBRAC+2
+
+XBRAC:			data.w DOES
+				data.w SETMODE
+				data.b $05
+
+;;
+;;    )Y
+;; 
+_BRACY			text.7 $82, ")Y"
+				data.w _XBRAC
+				data.w BRACY+2
+
+BRACY:			data.w DOES
+				data.w SETMODE
+				data.b $06
+;;
+;;    )
+;; 
+_MRBRAC:		text.7 $81, ")"
+				data.w _BRACY
+				data.w MRBRAC+2
+
+MRBRAC:			data.w DOES
+				data.w SETMODE
+				data.b $0f
+
+;;
+;;    TOP
+;;
+_DTOP:			text.7 $83, "TOP"
+				data.w _MRBRAC
+				data.w DTOP+2
+
+DTOP:			data.w DOCOL	
+    			data.w $d9fa 	; ToDo: UNK4
+    			data.w ZERO
+    			data.w SEMIS
+;;
+;;    SEC
+;;
+_DSEC            text.7 $83, "SEC"
+    			data.w _DTOP    ; link to .A
+    			data.w DSEC+2    ; PFAPTR
+
+DSEC:         	data.w DOCOL
+    			data.w $d9fa	; ToDo: UNK4
+    			data.w TWO
+    			data.w SEMIS
+
+;;
+;;    RP)
+;;
+_RP:         	text.7 $83, "RP)"
+                data.w _DSEC
+                data.w RP+2
+
+RP:				data.w DOCOL
+    			data.w $d9fa	; ToDo: UNK4
+				data.w LIT
+    			data.w $01
+    			data.w SEMIS
+
+;;
+;;
+;;
+UNK9:         	data.w DOCOL
+    			data.w ZBRAN
+    			data.w $0018
+    			data.w MODE
+    			data.w CAT
+    			data.w CLIT
+    			data.b $08
+    			data.w ANDD
+    			data.w ZEQ
+    			data.w ZBRAN
+    			data.w $0009
+    			data.w CLIT
+    			data.b $08
+    			data.w MODE
+    			data.w PSTORE
+    			data.w ONE
+    			data.w MODE
+    			data.w CAT
+    			data.w CLIT
+    			data.b $0f
+    			data.w ANDD
+    			data.w DDUP
+    			data.w ZBRAN
+    			data.w $000e
+    			data.w ZERO
+    			data.w DO
+    			data.w DUP
+    			data.w PLUS
+    			data.w LOOP
+    			data.w NMI
+    			data.w OVER
+    			data.w ONEPLUS
+    			data.w AT
+    			data.w ANDD
+    			data.w ZEQ
+    			data.w SEMIS
+	
+IMPLIED		    data.w CAT
+                data.w CCOMMA
+                data.w MEM
+    			data.w SEMIS
+	
+    			data.w DUP
+    			data.w ONEPLUS
+    			data.w CAT
+    			data.w CLIT
+    			data.b $80
+    			data.w ANDD
+    			data.w ZBRAN
+    			data.w $0009
+    			data.w CLIT
+    			data.b $10
+    			data.w MODE
+    			data.w PSTORE
+    			data.w OVER
+    			data.w LIT
+    			data.w $ff00
+    			data.w ANDD
+    			data.w UNK9
+    			data.w UNK9
+    			data.w ZBRAN
+    			data.w $000e
+    			data.w MEM
+    			data.w CR
+    			data.w LATEST
+    			data.w ID
+    			data.w THREE
+    			data.w ERR
+    			data.w CAT
+    			data.w MODE
+    			data.w CAT
+    			data.w LIT
+    			data.w UNK1
+    			data.w PLUS
+    			data.w CAT
+    			data.w PLUS
+    			data.w CCOMMA
+    			data.w MODE
+    			data.w CAT
+    			data.w CLIT
+    			data.b $07
+    			data.w ANDD
+    			data.w ZBRAN
+    			data.w $001c
+    			data.w MODE
+    			data.w CAT
+    			data.w CLIT
+    			data.b $0f
+    			data.w ANDD
+    			data.w CLIT
+    			data.b $07
+    			data.w LESS
+    			data.w ZBRAN
+    			data.w $0008
+    			data.w CCOMMA
+    			data.w BRAN
+    			data.w $0004
+    			data.w COMMA
+    			data.w MEM
+    			data.w SEMIS
+;;
+;;    BRK,
+;;
+_BRKC         	text.7 $84, "BRK,"
+    			data.w _RP    ; link to SEC
+    			data.w BRKC+2    ; PFAPTR
+
+BRKC:         	data.w DOES
+				data.w IMPLIED
+				data.b $00
+
+;; 
+;;    CLC,
+;; 	
+_CLCC			text.7 $84, "CLC,"
+				data.w _BRKC	; link to BRK,
+				data.w	CLCC+2 
+
+CLCC:			data.w DOES
+				data.w IMPLIED
+				data.b $18
+
+;;
+;;    CLD,
+;; 
+_CLDC:			text.7 $84, "CLD,"
+				data.w _CLCC					; link to CLCC
+				data.w CLDC+2
+
+CLDC:			data.w DOES
+    			data.w IMPLIED
+				data.b $d8
+
+;;
+;;    CLI,
+;; 
+_CLIC:			text.7 $84, "CLI,"
+				data.w _CLDC					; link to CLDC
+				data.w CLIC+2
+
+CLIC:			data.w DOES
+    			data.w IMPLIED
+				data.b $58
+
+;;
+;;    CLV,
+;; 
+_CLVC:			text.7 $84, "CLV,"
+				data.w _CLIC
+				data.w CLVC+2
+	
+CLVC:			data.w DOES
+				data.w IMPLIED
+				data.b $b8
+
+;;
+;;    DEC,
+;; 
+_DEXC:			text.7 $84, "DEX,"
+				data.w _CLVC
+				data.w DEXC+2
+	
+DEXC:			data.w DOES
+				data.w IMPLIED
+				data.b $ca
+
+;;
+;;    DEY,
+;; 
+_DEYC:			text.7 $84, "DEY,"
+				data.w _DEXC
+				data.w DEYC+2
+	
+DEYC:			data.w DOES
+				data.w IMPLIED
+				data.b $88
+
+;;
+;;    INX,
+;; 
+_INXC:			text.7 $84, "INX,"
+				data.w _DEYC
+				data.w INXC+2
+
+INXC:			data.w DOES
+				data.w IMPLIED
+				data.b $e8
+
+;;
+;;    INY,
+;; 
+_INYC:			text.7 $84, "INY,"
+				data.w _INXC
+				data.w INYC+2
+
+INYC:			data.w DOES
+				data.w IMPLIED
+				data.b $c8
+
+;;
+;;    NOP,
+;;  
+_NOPC:			text.7 $84, "NOP,"
+				data.w _INYC
+				data.w NOPC+2
+
+NOPC:			data.w DOES
+				data.w IMPLIED
+				data.b $ea
+
+;;
+;;    PHA,
+;; 
+_PHAC:			text.7 $84, "PHA,"
+				data.w _NOPC
+				data.w PHAC+2
+
+PHAC:			data.w DOES
+				data.w IMPLIED
+				data.b $48
+;;
+;;    PHP,
+;;
+_PHPC:			text.7 $84, "PHP,"
+				data.w _PHAC
+				data.w PHPC+2
+
+PHPC:			data.w DOES
+				data.w IMPLIED
+				data.b $08
+
+;;
+;;    PLA,
+;;
+_PLAC:			text.7 $84, "PLA,"
+				data.w _PHPC
+				data.w PLAC+2
+
+PLAC:			data.w DOES
+				data.w IMPLIED
+				data.b $68
+
+;;
+;;    PLP,
+;;
+_PLPC:			text.7 $84, "PLP,"
+				data.w _PLAC
+				data.w PLPC+2
+
+PLPC:			data.w DOES
+				data.w IMPLIED
+				data.b $28
+;;
+;;    RTI,
+;;
+_RTIC:			text.7 $84, "RTI,"
+				data.w _PLPC
+				data.w RTIC+2
+
+RTIC:			data.w DOES
+				data.w IMPLIED
+				data.b $40
+;;
+;;    RTS,
+;; 
+_RTSC:			text.7 $84, "RTS,"
+				data.w _RTIC
+				data.w RTSC+2
+
+RTSC:			data.w DOES
+				data.w IMPLIED
+				data.b $60
+;;
+;;    SEC,
+;;
+_SECC:			text.7 $84, "SEC,"
+				data.w _RTSC
+				data.w SECC+2
+
+SECC:			data.w DOES
+				data.w IMPLIED
+				data.b $38
+;;
+;;    SED,
+;;
+_SEDC:			text.7 $84, "SED,"
+				data.w _SECC
+				data.w SEDC+2
+
+SEDC:			data.w DOES
+				data.w IMPLIED
+				data.b $f8
+;;
+;;    SEI,
+;;
+_SEIC:			text.7 $84, "SEI,"
+				data.w _SEDC
+				data.w SEIC+2
+
+SEIC:			data.w DOES
+				data.w IMPLIED
+				data.b $78
+;;
+;;    TAX,
+;;
+_TAXC:			text.7 $84, "TAX,"
+				data.w _SEIC
+				data.w TAXC+2
+
+TAXC:			data.w DOES
+				data.w IMPLIED
+				data.b $aa
+;;
+;;    TAY,
+;;
+_TAYC:			text.7 $84, "TAY,"
+				data.w _TAXC
+				data.w TAYC+2
+
+TAYC:			data.w DOES
+				data.w IMPLIED
+				data.b $a8
+;;
+;;    TSX,
+;;
+_TSXC:			text.7 $84, "TSX,"
+				data.w _TAYC
+				data.w TSXC+2
+
+TSXC:			data.w DOES
+				data.w IMPLIED
+				data.b $ba
+;;
+;;    TXA,
+;;
+_TXAC:			text.7 $84, "TXA,"
+				data.w _TSXC
+				data.w TXAC+2
+
+TXAC:			data.w DOES
+				data.w IMPLIED
+				data.b $8a
+;;
+;;    TYA,
+;;
+_TYAC:			text.7 $84, "TYA,"
+				data.w _TXAC
+				data.w TYAC+2
+
+TYAC:			data.w DOES
+				data.w IMPLIED
+				data.b $98
+;;
+;;    TXS,
+;;
+_TXSC:			text.7 $84, "TXS,"
+				data.w _TYAC
+				data.w TXSC+2
+
+TXSC:			data.w DOES
+				data.w IMPLIED
+				data.b $9a
+;;
+;;    ADC,
+;;
+_ADCC:		text.7 $84, "ADC,"
+			data.w _TXSC
+			data.w ADCC+2
+
+ADCC:		data.w DOES
+			data.w $daad
+			data.b $60, $6e, $1c
+
+;;
+;;    AND,
+;;
+_ANDC:		text.7 $84, "AND,"
+			data.w _ADCC
+			data.w ANDC+2
+
+ANDC:		data.w DOES
+			data.w $daad
+			data.b $20, $6e, $1c
+
+;;
+;;    CMP,
+;;
+_CMPC:		text.7 $84, "CMP,"
+			data.w _ANDC
+			data.w CMPC+2
+
+CMPC:		data.w DOES
+			data.w $daad
+			data.b $c0, $6e, $1c
+
+	;;
+	;;    EOR,
+	;;
+_EORC:		text.7 $84, "EOR,"
+			data.w _CMPC
+			data.w EORC+2
+
+EORC:		data.w DOES
+			data.w $daad
+			data.b $40, $6e, $1c
+
+	;;
+	;;    LDA,
+	;;
+_LDAC:		text.7 $84, "LDA,"
+			data.w _EORC
+			data.w LDAC+2
+
+LDAC:		data.w DOES
+			data.w $daad
+			data.b $a0, $6e, $1c
+
+	;;
+	;;    ORA,
+	;;
+_ORAC:		text.7 $84, "ORA,"
+			data.w _LDAC
+			data.w ORAC+2
+
+ORAC:		data.w DOES
+			data.w $daad
+			data.b $00, $6e, $1c
+
+	;;
+	;;    SBC,
+	;;
+_SBCC:		text.7 $84, "SBC,"
+			data.w _ORAC
+			data.w SBCC+2
+
+SBCC:		data.w DOES
+			data.w $daad
+			data.b $e0, $6e, $1c
+
+	;;
+	;;    STA,
+	;;
+_STAC:		text.7 $84, "STA,"
+			data.w _SBCC
+			data.w STAC+2
+
+STAC:		data.w DOES
+			data.w $daad
+			data.b $80, $6c, $1c
+
+	;;
+	;;    ASL,
+	;;
+_ASLC:		text.7 $84, "ASL,"
+			data.w _STAC
+			data.w ASLC+2
+
+ASLC:		data.w DOES
+			data.w $daad
+			data.b $01, $0d, $0d
+
+	;;
+	;;    DEC,
+	;;
+_DECC:		text.7 $84, "DEC,"
+			data.w _ASLC
+			data.w DECC+2
+
+DECC:		data.w DOES
+			data.w $daad
+			data.b $c1, $0c, $0c
+
+	;;
+	;;    INC,
+	;;
+_INCC:		text.7 $84, "INC,"
+			data.w _DECC
+			data.w INCC+2
+
+INCC:		data.w DOES
+			data.w $daad
+			data.b $e1, $0c, $0c
+
+	;;
+	;;    LSR,
+	;;
+_LSRC:		text.7 $84, "LSR,"
+			data.w _INCC
+			data.w LSRC+2
+
+LSRC:		data.w DOES
+			data.w $daad
+			data.b $41, $0d, $0d
+
+	;;
+	;;    ROL,
+	;;
+_ROLC:		text.7 $84, "ROL,"
+			data.w _LSRC
+			data.w ROLC+2
+
+ROLC:		data.w DOES
+			data.w $daad
+			data.b $21, $0d, $0d
+
+	;;
+	;;    ROR,
+	;;
+_RORC:		text.7 $84, "ROR,"
+			data.w _ROLC
+			data.w RORC+2
+
+RORC:		data.w DOES
+			data.w $daad
+			data.b $61, $0d, $0d
+
+	;;
+	;;    STX,
+	;;
+_STXC:		text.7 $84, "STX,"
+			data.w _RORC
+			data.w STXC+2
+
+STXC:		data.w DOES
+			data.w $daad
+			data.b $81, $14, $04
+
+	;;
+	;;    CPX,
+	;;
+_CPXC:		text.7 $84, "CPX,"
+			data.w _STXC
+			data.w CPXC+2
+
+CPXC:		data.w DOES
+			data.w $daad
+			data.b $e0, $86, $04
+
+	;;
+	;;    CPY,
+	;;
+_CPYC:		text.7 $84, "CPY,"
+			data.w _CPXC
+			data.w CPYC+2
+
+CPYC:		data.w DOES
+			data.w $daad
+			data.b $c0, $86, $04
+
+	;;
+	;;    LDX,
+	;;
+_LDXC:		text.7 $84, "LDX,"
+			data.w _CPYC
+			data.w LDXC+2
+
+LDXC:		data.w DOES
+			data.w $daad
+			data.b $a2, $96, $14
+
+	;;
+	;;    LDY,
+	;;
+_LDYC:		text.7 $84, "LDY,"
+			data.w _LDXC
+			data.w LDYC+2
+
+LDYC:		data.w DOES
+			data.w $daad
+			data.b $a0, $8e, $0c
+
+	;;
+	;;    STY,
+	;;
+_STYC:		text.7 $84, "STY,"
+			data.w _LDYC
+			data.w STYC+2
+
+STYC:		data.w DOES
+			data.w $daad
+			data.b $80, $8c, $04
+
+	;;
+	;;    JSR,
+	;;
+_JSRC:		text.7 $84, "JSR,"
+			data.w _STYC
+			data.w JSRC+2
+
+JSRC:		data.w DOES
+			data.w $daad
+			data.b $14, $80, $04
+
+	;;
+	;;    JMP,
+	;;
+_JMPC:		text.7 $84, "JMP,"
+			data.w _JSRC
+			data.w JMPC+2
+
+JMPC:		data.w DOES
+			data.w $daad
+			data.b $40, $80, $84
+
+	;;
+	;;    BIT,
+	;; 
+_BITC:		text.7 $84, "BIT,"
+			data.w _JMPC
+			data.w BITC+2
+
+BITC:		data.w DOES
+			data.w $daad
+			data.b $20, $84, $04
+
+;;
+;;    SMB,
+;;
+_SMBC           text.7 $84, "SMB,"
+    			data.w _BITC    ; link to BIT,
+    			data.w SMBC+2   ; PFAPTR
+
+SMBC:         	data.w DOCOL
+    			data.w MODE
+    			data.w AT
+    			data.w MEM
+    			data.w TWO
+    			data.w EQUAL
+    			data.w ZBRAN
+    			data.w $001b
+    			data.w CLIT
+    			data.b $87
+    			data.w SWAP
+    			data.w CLIT
+    			data.b $07
+    			data.w ANDD
+    			data.w CLIT
+    			data.b $10
+    			data.w MUL
+    			data.w OR
+    			data.w CCOMMA
+    			data.w CCOMMA
+    			data.w BRAN
+    			data.w $0006
+    			data.w THREE
+    			data.w ERR
+    			data.w SEMIS
+;;
+;;    RMB,
+;;
+_RMBC         	text.7 $84, "RMB,"
+    			data.w _SMBC    ; link to SMB,
+    			data.w RMBC+2 	; PFAPTR
+
+RMBC: 	        data.w DOCOL
+    			data.w MODE
+    			data.w AT
+    			data.w MEM
+    			data.w TWO
+    			data.w EQUAL
+    			data.w ZBRAN
+    			data.w $ffe3
+    			data.w CLIT
+    			data.b $07
+    			data.w BRAN
+    			data.w $ffc6
+
+_BITSET:		text.7 $86, "BITSET"
+				data.w _RMBC				; link to
+				data.w BITSET+2				; PFAPTR
+
+BITSET:			data.w DOCOL
+				data.w MODE
+				data.w AT
+				data.w TWO
+				data.w EQUAL
+				data.w ZBRAN
+				data.w $ffc3
+				data.w CLIT
+				data.b $0f	
+    			data.w SWAP
+    			data.w CLIT
+    			data.b $07
+    			data.w ANDD
+    			data.w CLIT
+    			data.b $10
+    			data.w MUL
+    			data.w OR
+    			data.w CCOMMA
+    			data.w SEMIS
+;;
+;;    BITCLR
+;;
+_BITCLR         text.7 $86, "BITCLR"
+    			data.w _BITSET    ; link to RMB,
+    			data.w BITCLR+2    ; PFAPTR
+
+BITCLR:         data.w DOCOL
+    			data.w MODE
+    			data.w AT
+    			data.w TWO
+    			data.w EQUAL
+    			data.w ZBRAN
+    			data.w $ff95
+    			data.w CLIT
+    			data.b $8f
+    			data.w BRAN
+    			data.w $ffd0
+
+_BEGINC:		text.7 $86,"BEGIN,"
+				data.w _BITCLR
+				data.w BEGINC+2
+
+BEGINC:			data.w DOCOL
+				data.w HERE
+				data.w ONE
+				data.w SEMIS
+
+;;
+;;    UNTIL,
+;;
+_UNTILC        	text.7 $86, "UNTIL,"
+                data.w _BEGINC    ; link to BEGIN
+                data.w UNTILC+2    ; PFAPTR
+;;
+;;
+;;
+UNTILC:         data.w DOCOL
+    			data.w GTR
+    			data.w ONE
+    			data.w QPAIRS
+    			data.w RFROM
+    			data.w CCOMMA
+    			data.w HERE
+    			data.w ONEPLUS
+    			data.w SUB
+    			data.w CCOMMA
+    			data.w SEMIS
+;;
+;;    WHILE,
+;;
+_WHILEC         text.7 $86, "WHILE,"
+                data.w _UNTILC    ; link to UNTIL,
+                data.w WHILEC+2    ; PFAPTR
+;;
+;;
+;;
+WHILEC:         data.w DOCOL
+    			data.w CCOMMA
+    			data.w HERE
+    			data.w ZERO
+    			data.w CCOMMA
+    			data.w THREE
+    			data.w SEMIS
+;;
+;;    AGAIN,
+;;
+_AGAINC         text.7 $86, "AGAIN,"
+    			data.w _WHILEC    ; link to WHILE,
+    			data.w AGAINC+2    ; PFAPTR
+
+AGAINC:        	data.w DOCOL
+    			data.w ONE
+    			data.w QPAIRS
+    			data.w JMPC
+    			data.w SEMIS
+;;
+;;    REPEAT,
+;;
+_REPEATC        text.7 $87, "REPEAT,"
+    			data.w _AGAINC    ; link to AGAIN,
+    			data.w REPEATC+2    ; PFAPTR
+
+REPEATC:        data.w DOCOL
+    			data.w THREE
+    			data.w QPAIRS
+    			data.w GTR
+    			data.w AGAINC
+    			data.w RFROM
+    			data.w HERE
+    			data.w OVER
+    			data.w ONEPLUS
+    			data.w SUB
+    			data.w SWAP
+    			data.w CSTOR
+    			data.w SEMIS
+;;
+;;    IF,
+;;
+_IFC            text.7 $83, "IF,"
+    			data.w _REPEATC    ; link to REPEAT,
+    			data.w IFC+2    ; PFAPTR
+
+IFC:         	data.w DOCOL
+    			data.w CCOMMA
+    			data.w HERE
+    			data.w ZERO
+    			data.w CCOMMA
+    			data.w TWO
+    			data.w SEMIS
+;;
+;;    ENDIF,
+;;
+_ENDIFC         text.7 $86, "ENDIF,"
+    			data.w _IFC    ; link to IF,
+    			data.w ENDIFC+2    ; PFAPTR
+;;
+;;
+;;
+ENDIFC:         data.w DOCOL
+    			data.w TWO
+    			data.w QPAIRS
+    			data.w HERE
+    			data.w OVER
+    			data.w CAT
+    			data.w ZBRAN
+    			data.w $0008
+    			data.w SWAP
+    			data.w STORE
+    			data.w SEMIS
+    			data.w OVER
+    			data.w ONEPLUS
+    			data.w SUB
+    			data.w SWAP
+    			data.w CSTOR
+    			data.w SEMIS
+;;
+;;    THEN,
+;;
+_THENC          text.7 $85, "THEN,"
+                data.w _ENDIFC    ; link to ENDIF,
+                data.w THENC+2     ; PFAPTR
+;;
+;;
+;;
+THENC:         	data.w DOCOL
+    			data.w ENDIFC
+    			data.w SEMIS
+;;
+;;    ELSE,
+;;
+_ELSEC          text.7 $85, "ELSE,"
+    			data.w _THENC      ; link to THEN,
+    			data.w ELSEC+2    ; PFAPTR
+
+ELSEC:          data.w DOCOL
+    			data.w TWO
+    			data.w QPAIRS
+    			data.w HERE
+    			data.w ONEPLUS
+    			data.w ONE
+    			data.w JMPC
+    			data.w SWAP
+    			data.w HERE
+    			data.w OVER
+    			data.w ONEPLUS
+    			data.w SUB
+    			data.w SWAP
+    			data.w CSTOR
+    			data.w TWO
+    			data.w SEMIS
+;;
+;;    NOT
+;;
+_NOT            text.7 $83, "NOT"
+    			data.w _ELSEC    ; link to ELSE,
+    			data.w NOT+2     ; PFAPTR
+
+NOT:         	data.w DOCOL
+    			data.w BL
+    			data.w XOR
+    			data.w SEMIS
+;;
+;;    CS
+;;
+_CS             text.7 $82, "CS"
+    			data.w _NOT    ; link to NOT
+    			data.w CS+2    ; PFAPTR
+
+CS:         	data.w DOCON
+    			data.w $0090
+;;
+;;    VS
+;;
+_VS             text.7 $82, "VS"
+    			data.w _CS    ; link to CS
+    			data.w VS+2    ; PFAPTR
+
+VS:         	data.w DOCON
+    			data.w $0050
+;;
+;;    0=
+;;
+_ZEQ            text.7 $82, "0="
+    			data.w _VS    ; link to VS
+    			data.w ZEQ+2    ; PFAPTR
+
+ZEQ:         	data.w DOCON
+    			data.w $00d0
+;;
+;;    0<
+;;
+_ZLESS          text.7 $82, "0<"
+    			data.w _ZEQ    ; link to 0=
+    			data.w ZLESS+2    ; PFAPTR
+
+ZLESS:         	data.w DOCON
+    			data.w $0010
+
+;;
+;;    END-CODE
+;;
+_ENDCODE        text.7 $c8, "END-CODE"
+    			data.w _ZLESS    ; link to 0<
+    			data.w ENDCODE+2    ; PFAPTR
+
+ENDCODE:        data.w DOCOL
+    			data.w CURRENT
+    			data.w AT
+    			data.w CONTEXT
+    			data.w STORE
+    			data.w QEXEC
+    			data.w QCSP
+    			data.w SMUDGE
+    			data.w SEMIS
+;;
+;;    TASK
+;;
+_TASK           text.7 $84, "TASK"
+    			data.w _ADMP    ; link to END-CODE
+    			data.w TASK+2    ; PFAPTR
+
+TASK:         	data.w DOCOL
+    			data.w SEMIS
+
+PADDINGD:       data.b $ff, $ff
+                data.b $ff
+

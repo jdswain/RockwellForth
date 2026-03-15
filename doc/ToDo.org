@@ -1,0 +1,32 @@
+1. Processor if's
+For the kernel, make one file assemble for both R6501Q and R65C02.
+
+2. Get Development working on R65C02
+   
+3. Support .o and linking.
+Big task.
+Add symbols to ELF file.
+Add extern references. Might have to specify datatypes.
+Support multiple segments in ELF file.
+Update simulator to:
+  - Configure based on MACHINE in ELF.
+  - Support multiple segments.	
+
+4. Tidy up FORTH and publish on github.
+
+5. Public release of 65Tools.
+Assembler manual.
+README and build instructions.
+
+99. Possible later additions
+[A] Support C19 processor.
+[B] Update to use Rockwell Forth instructions.
+[B] Support 65C816 processor for FORTH interpreter.
+[C] Relocatable files.
+[C] Relocating loader in simulator.
+
+SOS filesystem
+FORTH graphics
+SOS boot from FORTH kernel
+FORTH development in SOS
+

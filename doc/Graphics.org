@@ -1,0 +1,40 @@
+* Graphics
+
+fgColor bgColor
+gx gy
+vx vy ww vh
+
+PSET
+PCLR
+
+MOVETO
+LINETO
+ARCTO
+
+SETVIEWPORT
+CLEARRECT
+MOVERECT
+
+BLIT
+DRAWSTRING
+STRINGWIDTH
+SETFONT
+
+255 chars as 8x18 4.5k for font
+
+index: word[]
+
+char {
+  w: byte
+  h: byte
+  image: byte[]
+}
+
+* Later
+Bold, Italic, Underline
+BLIT scaling
+Image resources
+
+
+
+

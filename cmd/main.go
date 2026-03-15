@@ -298,6 +298,7 @@ const(
 	Address
 	Word // A headless word
 	WordDef
+	NextWord
 	Vector
 	Register
 	Code
@@ -444,7 +445,7 @@ var kernel_datalist = map[int]data {
 	0xf7d3: {"SWAP", 0x0002, Word}, // SWAP data
 	0xf8c7: {"TIB", 0x0002, Word}, // TIB data
 	0xf830: {"TOGGL", 0x0002, Word}, // TOGGLE data
-	0xf93f: {"TYPE", 0x0002, Word}, // TYPE data
+	0xf9ef: {"TYPE", 0x0002, Word}, // TYPE data
 	0xf646: {"UMUL", 0x0002, Word}, // U* data
 	0xf67b: {"UDIV", 0x0002, Word}, // U/ data
 	0xf940: {"ULESS", 0x0002, Word}, // U< data
@@ -464,7 +465,7 @@ var kernel_datalist = map[int]data {
 	0xff7f: {"unkn6", 0x0002, Code},
 
 	0xffb6: {"unkna", 0x0002, Word},
-	0xffca: {"unknb", 0x0002, Word},
+	0xffca: {"MON", 0x0002, Word},
 
 	0xfe03: {"SUB1", 0x0002, Code},
 	0xfe0d: {"TAB1", 0x0004, Bytes},
@@ -566,28 +567,516 @@ var kernel_datalist = map[int]data {
 
 var development_datalist = map[int]data {
 	0xc000: {"IDENT", 0x0002, Word}, 
-	0xc002: {"START", 0x0002, Word}, 
-	0xc004: {"pad", 0x01d, Word}, 
-	0xc02c: {"LIT", 0x0002, WordDef}, 
-	0xc034: {"CLIT", 0x0002, WordDef},
-	0xc03d: {"EXECUTE", 0x0002, WordDef},
-	0xc049: {"BRANCH", 0x0002, WordDef},
-	0xc054: {"0BRANCH", 0x0002, WordDef}, 
-	0xc060: {"(LOOP)", 0x0002, WordDef}, 
-	0xc06b: {"(+LOOP)", 0x0002, WordDef}, 
-	0xc077: {"(DO)", 0x0002, WordDef}, 
-	0xc080: {"I", 0x0002, WordDef}, 
-	0xc086: {"unkn", 0x0002, Word}, 
-	0xc088: {"DIGIT", 0x0002, WordDef}, 
-	0xc09d: {"ENCLOSE", 0x0002, WordDef}, 
+	0xc002: {"START", 0x0002, Word},
+	0xc004: {"UNKNOWN", 0x027, Bytes}, 
 
-	// Disk Registers
-	// For the R6501Q these are at E000 and E100
-	0xe000: {"DSK_STATUS", 0x0001, Register},
-	0xe101: {"DSK_TRACK", 0x0001, Register},
-	0xe102: {"DSK_SECTOR", 0x0001, Register},
-	0xe103: {"DSK_DATA", 0x0001, Register},
-	0xe106: {"DSK_CTL", 0x0001, Register},
+	0xc02c: {"_LIT", 0x0002, WordDef},
+	0xc034: {"_CLIT", 0x0002, WordDef},
+	0xc03d: {"_EXECUTE", 0x0002, WordDef},
+	0xc049: {"_BRANCH", 0x0002, WordDef},
+	0xc054: {"_ZBRANCH", 0x0002, WordDef},
+	0xc060: {"_PLOOP", 0x0002, WordDef},
+	0xc06b: {"_PPLOOP", 0x0002, WordDef},
+	0xc077: {"_PDO", 0x0002, WordDef},
+	0xc080: {"_I", 0x0002, WordDef},
+	0xc088: {"_DIGIT", 0x0002, WordDef},
+	0xc092: {"_PFIND", 0x0002, WordDef},
+	0xc09d: {"_ENCLOSE", 0x0002, WordDef},
+	0xc0a9: {"_EMIT", 0x0002, WordDef},
+	0xc0b2: {"_KEY", 0x0002, WordDef},
+	0xc0ba: {"_QTERMINAL", 0x0002, WordDef},
+	0xc0c8: {"_CR", 0x0002, WordDef},
+    0xc0cf: {"_XON", 0x0002, WordDef},
+    0xc0d7: {"XON", 0x0002, Word},
+    0xc0df: {"_XOFF", 0x0002, WordDef},
+    0xc0e8: {"XOFF", 0x0002, Word},
+    0xc0f0: {"_SOURCE", 0x0002, WordDef},
+    0xc0fb: {"SOURCE", 0x0002, Word},
+    0xc13d: {"_FINIS", 0x0002, WordDef},
+    0xc147: {"FINIS", 0x0002, Word},
+    0xc154: {"_CMOVE", 0x0002, WordDef},
+    0xc15e: {"_UMUL", 0x0002, WordDef},
+    0xc165: {"_UDIV", 0x0002, WordDef},
+    0xc16c: {"_AND", 0x0002, WordDef},
+    0xc174: {"_OR", 0x0002, WordDef},
+    0xc17b: {"_XOR", 0x0002, WordDef},
+    0xc183: {"_SPAT", 0x0002, WordDef},
+    0xc18b: {"_SPSTOR", 0x0002, WordDef},
+    0xc193: {"_RPSTOR", 0x0002, WordDef},
+    0xc19b: {"_RPAT", 0x0002, WordDef},
+    0xc1a3: {"_SEMIS", 0x0002, WordDef},	
+    0xc1aa: {"_LEAVE", 0x0002, WordDef},
+    0xc1b4: {"_GTR", 0x0002, WordDef},
+    0xc1bb: {"_RGT", 0x0002, WordDef},
+    0xc1c2: {"_R", 0x0002, WordDef},
+    0xc1c8: {"_ZEQ", 0x0002, WordDef},
+    0xc1cf: {"_NOT", 0x0002, WordDef},
+	0xc1d9: {"_ZLT", 0x0002, WordDef},
+    0xc1e0: {"_PLUS", 0x0002, WordDef},
+    0xc1e6: {"_DPLUS", 0x0002, WordDef},
+    0xc1ed: {"_NEGATE", 0x0002, WordDef},
+    0xc1f8: {"_DNEGATE", 0x0002, WordDef},
+    0xc204: {"_OVER", 0x0002, WordDef},
+    0xc20d: {"_DROP", 0x0002, WordDef},
+    0xc216: {"_TWODROP", 0x0002, WordDef},
+    0xc220: {"_SWAP", 0x0002, WordDef},
+    0xc229: {"_DUP", 0x0002, WordDef},
+    0xc231: {"_TWODUP", 0x0002, WordDef},
+    0xc23a: {"_BOUNDS", 0x0002, WordDef},
+    0xc245: {"_PLUSSTOR", 0x0002, WordDef},
+    0xc24c: {"_TOGGLE", 0x0002, WordDef},
+    0xc257: {"_AT", 0x0002, WordDef},
+    0xc25d: {"_CAT", 0x0002, WordDef},
+    0xc264: {"_STOR", 0x0002, WordDef},
+    0xc26a: {"_CSTOR", 0x0002, WordDef},
+    0xc271: {"CSTOR", 0x0002, Word},
+    0xc281: {"_COLON", 0x0020, WordDef},
+    0xc287: {"COLON", 0x0002, Word},
+    0xc29f: {"_SEMI", 0x0002, WordDef},
+    0xc2a6: {"SEMI", 0x0002, Word},
+    0xc2b3: {"_CONSTANT", 0x0002, WordDef},
+    0xc2c0: {"CONSTANT", 0x0002, Word},
+    0xc2ce: {"_VARIABLE", 0x0002, WordDef},
+    0xc2db: {"VARIABLE", 0x0002, Word},
+    0xc2e5: {"_CODE", 0x0002, WordDef},
+    0xc2ee: {"CODE", 0x0002, Word},
+    0xc2fb: {"PADVAR", 0x0001, Bytes},
+    0xc2fc: {"_USER", 0x0002, WordDef},
+    0xc305: {"USER", 0x0002, Word},
+    0xc312: {"pad", 0x0001, Bytes},
+    0xc313: {"_ZERO", 0x0002, WordDef},
+    0xc319: {"_ONE", 0x0002, WordDef},
+    0xc31f: {"_TWO", 0x0002, WordDef},
+    0xc325: {"_THREE", 0x0002, WordDef},
+    0xc32b: {"_FOUR", 0x0002, WordDef},
+    0xc331: {"_BL", 0x0002, WordDef},
+    0xc338: {"_TIB", 0x0002, WordDef},
+    0xc340: {"_S0", 0x0002, WordDef},
+    0xc347: {"_R0", 0x0002, WordDef},
+    0xc34e: {"_UCL", 0x0002, WordDef},
+    0xc357: {"_UPAD", 0x0002, WordDef},
+    0xc360: {"_URW", 0x0002, WordDef},
+    0xc369: {"_BASE", 0x0002, WordDef},
+    0xc372: {"_CLDWRM", 0x0002, WordDef},
+    0xc37e: {"_IN", 0x0002, WordDef},
+    0xc385: {"_DPL", 0x0002, WordDef},
+    0xc38d: {"_HLD", 0x0002, WordDef},
+    0xc395: {"_DISKNO", 0x0002, WordDef},
+    0xc3a0: {"DISKNO", 0x0002, Word},
+	0xc3a3: {"_CYLINDER", 0x0002, WordDef},
+	0xc3b0: {"CYLINDER", 0x0002, Word},
+	0xc3b3: {"_BSIDE", 0x0002, WordDef},
+	0xc3be: {"BSIDE", 0x0002, Word},
+	0xc3c1: {"_UFIRST", 0x0002, WordDef},
+	0xc3cc: {"UFIRST", 0x0002, Word},
+    0xc3cf: {"_ULIMIT", 0x0002, WordDef},
+    0xc3da: {"ULIMIT", 0x0002, Word},
+    0xc3dd: {"_OFFSET", 0x0002, WordDef},
+    0xc3e8: {"OFFSET", 0x0002, Word},
+    0xc3eb: {"_WIDTH", 0x0002, WordDef},
+    0xc3f5: {"WIDTH", 0x0002, Word},
+    0xc3f8: {"_WARNING", 0x0002, WordDef},
+    0xc404: {"WARNING", 0x0002, Word},
+    0xc407: {"_FENCE", 0x0002, WordDef},
+    0xc411: {"FENCE", 0x0002, Word},
+    0xc414: {"_DP", 0x0002, WordDef},
+    0xc41b: {"DP", 0x0002, Word},
+    0xc41e: {"_HEADERLESS", 0x0002, WordDef},
+    0xc42d: {"HEADERLESS", 0x0002, Word},
+    0xc430: {"_VOCL", 0x0002, WordDef},
+    0xc43d: {"VOCL", 0x0002, Word},
+	0xc440: {"unk", 0x0006, Bytes},
+	0xc446: {"_UABORT", 0x0002, WordDef},
+	0xc451: {"UABORT", 0x0002, Word},
+    0xc454: {"_USE", 0x0002, WordDef},
+    0xc45c: {"USE", 0x0002, Word},
+    0xc45f: {"_PREV", 0x0002, WordDef},
+    0xc468: {"PREV", 0x0002, Word},
+    0xc46b: {"_BLK", 0x0002, WordDef},
+    0xc473: {"BLK", 0x0002, Word},
+    0xc476: {"_SCR", 0x0002, WordDef},
+    0xc47e: {"SCR", 0x0002, Word},
+    0xc481: {"_CONTEXT", 0x0002, WordDef},
+    0xc48d: {"CONTEXT", 0x0002, Word},
+    0xc490: {"_CURRENT", 0x0002, WordDef},
+    0xc49c: {"CURRENT", 0x0002, Word},
+    0xc49f: {"_STATE", 0x0002, WordDef},
+    0xc4a9: {"STATE", 0x0002, Word},
+    0xc4ac: {"_CSP", 0x0002, WordDef},
+    0xc4b4: {"CSP", 0x0002, Word},
+    0xc4b7: {"_MODE", 0x0002, WordDef},
+    0xc4c0: {"MODE", 0x0002, Word},
+    0xc4c3: {"_KHZ", 0x0002, WordDef},
+    0xc4cb: {"KHZ", 0x0002, Word},
+    0xc4ce: {"CL", 0x0002, WordDef},
+    0xc4d6: {"_FIRST", 0x0002, WordDef},
+    0xc4e0: {"FIRST", 0x0002, Word},
+    0xc4e8: {"_LIMIT", 0x0002, WordDef},
+    0xc4f2: {"LIMIT", 0x0002, Word},
+    0xc4fa: {"_PAD", 0x0002, WordDef},
+    0xc502: {"_ONEPLUS", 0x0002, WordDef},
+    0xc509: {"_2PLUS", 0x0002, WordDef},
+    0xc510: {"_1SUB", 0x0002, WordDef},
+    0xc517: {"_2SUB", 0x0002, WordDef},
+    0xc51e: {"_DPDIV", 0x0002, WordDef},
+    0xc526: {"DPDIV", 0x0002, Word},
+    0xc536: {"_HEREDIV", 0x0002, WordDef},
+    0xc540: {"HEREDIV", 0x0002, Word},
+    0xc548: {"_ALLOTDIV", 0x0002, WordDef},
+    0xc553: {"ALLOTDIV", 0x0002, Word},
+    0xc55b: {"_COMMADIV", 0x0002, WordDef},
+    0xc562: {"COMMADIV", 0x0002, Word},
+    0xc56e: {"_HERE", 0x0002, WordDef},
+    0xc577: {"HERE", 0x0002, Word},
+    0xc57f: {"_ALLOT", 0x0002, WordDef},
+    0xc589: {"ALLOT", 0x0002, Word},
+    0xc591: {"_COMMA", 0x0002, WordDef},
+    0xc597: {"COMMA", 0x0002, Word},
+    0xc5a3: {"_CCOMMA", 0x0002, WordDef},
+    0xc5aa: {"CCOMMA", 0x0002, Word},
+    0xc5b6: {"_SUB", 0x0002, WordDef},
+    0xc5bc: {"_EQ", 0x0002, WordDef},
+    0xc5c2: {"_ULT", 0x0002, WordDef},
+    0xc5c9: {"_LT", 0x0002, WordDef},
+    0xc5cf: {"_GT", 0x0002, WordDef},
+    0xc5d5: {"_ROT", 0x0002, WordDef},
+    0xc5dd: {"_PICK", 0x0002, WordDef},
+    0xc5e6: {"_SPACE", 0x0002, WordDef},
+    0xc5f0: {"_SUBDUP", 0x0002, WordDef},
+    0xc5f9: {"_TRAVERSE", 0x0002, WordDef},
+    0xc606: {"TRAVERSE", 0x0002, Word},
+    0xc621: {"_LATEST", 0x0002, WordDef},
+    0xc62c: {"LATEST", 0x0002, Word},
+    0xc636: {"_LFA", 0x0002, WordDef},
+    0xc63e: {"LFA", 0x0002, Word},
+    0xc640: {"_CFA", 0x0002, WordDef},
+    0xc648: {"CFA", 0x0002, Word},
+    0xc650: {"_NFA", 0x0002, WordDef},
+    0xc658: {"NFA", 0x0002, Word},
+    0xc667: {"_PFAPTR", 0x0002, WordDef},
+    0xc672: {"PFAPTR", 0x0002, Word},
+    0xc67f: {"_STORCSP", 0x0002, WordDef},
+    0xc688: {"STORCSP", 0x0002, Word},
+    0xc692: {"_QERROR", 0x0002, WordDef},
+    0xc69d: {"QERROR", 0x0002, Word},
+    0xc6ab: {"_QCOMP", 0x0002, WordDef},
+    0xc6b5: {"QCOMP", 0x0002, Word},
+    0xc6c4: {"_QEXEC", 0x0002, WordDef},
+    0xc6ce: {"QEXEC", 0x0002, Word},
+    0xc6db: {"_QPAIRS", 0x0002, WordDef},
+    0xc6e6: {"QPAIRS", 0x0002, Word},
+    0xc6f1: {"_QCSP", 0x0002, WordDef},
+    0xc6fa: {"QCSP", 0x0002, Word},
+    0xc70b: {"_COMPILE", 0x0002, WordDef},
+    0xc717: {"COMPILE", 0x0002, Word},
+    0xc729: {"_LBRAC", 0x0002, WordDef},
+    0xc72f: {"LBRAC", 0x0002, Word},
+    0xc739: {"_RBRAC", 0x0002, WordDef},
+    0xc73f: {"RBRAC", 0x0002, Word},
+    0xc74a: {"_SMUDGE", 0x0002, WordDef},
+    0xc755: {"SMUDGE", 0x0002, Word},
+    0xc75f: {"_HEX", 0x0002, WordDef},
+    0xc767: {"_DECIMAL", 0x0002, WordDef},
+    0xc773: {"_PSEMICODE", 0x0002, WordDef},
+    0xc77f: {"PSEMICODE", 0x0002, Word},
+    0xc78d: {"_SEMICODE", 0x0002, WordDef},
+    0xc797: {"SEMICODE", 0x0002, Word},
+    0xc7a5: {"_LTBUILDS", 0x0002, WordDef},
+    0xc7b1: {"LTBUILDS", 0x0002, Word},
+    0xc7b9: {"_DOESGT", 0x0002, WordDef},
+    0xc7c3: {"DOESGT", 0x0002, Word},
+    0xc7d5: {"_COUNT", 0x0002, WordDef},
+    0xc7df: {"_TYPE", 0x0002, WordDef},
+    0xc7e8: {"_SUBTRAILING", 0x0002, WordDef},
+    0xc7f6: {"_PDOTQUOT", 0x0002, WordDef},
+    0xc7ff: {"_DOTQUOT", 0x002d, WordDef},
+    0xc806: {"DOTQUOT", 0x002d, Word},
+    0xc815: {"PDOTQADDR", 0x0002, Bytes},
+    0xc817: {"CONT", 0x0002, Word},
+    0xc82d: {"EXPECT", 0x0002, WordDef},
+    0xc838: {"_QUERY", 0x0002, WordDef},
+	0xc842: {"_FX", 0x0002, WordDef},
+	0xc848: {"FX", 0x0002, Word},
+    0xc866: {"_FILL", 0x0002, WordDef},
+    0xc86f: {"_ERASE", 0x0002, WordDef},
+    0xc879: {"_BLANKS", 0x0002, WordDef},
+    0xc884: {"_HOLD", 0x0002, WordDef},
+    0xc88d: {"_FWORD", 0x0002, WordDef},
+    0xc896: {"FWORD", 0x0002, Word},
+    0xc8db: {"_PNUMBER", 0x0002, WordDef},
+    0xc8e8: {"_NUMBER", 0x0002, WordDef},
+    0xc8f3: {"NUMBER", 0x0002, Word},
+    0xc941: {"_SUBFIND", 0x0002, WordDef},
+    0xc94b: {"SUBFIND", 0x0002, Word},
+    0xc96d: {"_PABORT", 0x0002, WordDef},
+    0xc979: {"PABORT", 0x0002, Word},
+    0xc983: {"_ERR", 0x0002, WordDef},
+    0xc98d: {"ERR", 0x0002, Word},
+    0xc9c2: {"_ID", 0x0002, WordDef},
+    0xc9ca: {"ID", 0x0002, Word},
+    0xc9e8: {"_CREATE", 0x0002, WordDef},
+    0xc9f3: {"CREATE", 0x0002, Word},
+    0xca88: {"_BRACCOMPILE", 0x0002, WordDef},
+    0xca96: {"BRACCOMPILE", 0x0002, Word},
+    0xcaa8: {"_LITERAL", 0x0002, WordDef},
+    0xcab4: {"LITERAL", 0x0002, Word},
+    0xcad2: {"CREATE5", 0x0002, Word},
+    0xcad9: {"PAD_DDD", 0x0001, Bytes},
+    0xcada: {"_DLITERAL", 0x0002, WordDef},
+    0xcae7: {"DLITERAL", 0x0002, Word},
+    0xcaf9: {"_QSTACK", 0x0002, WordDef},
+    0xcb04: {"QSTACK", 0x0002, Word},
+    0xcb21: {"_INTERPRET", 0x0002, WordDef},
+    0xcb2f: {"INTERPRET", 0x0002, Word},
+    0xcb71: {"_IMMEDIATE", 0x0002, WordDef},
+    0xcb7f: {"IMMEDIATE", 0x0002, Word},
+    0xcb8a: {"_VOCABULARY", 0x0002, WordDef},
+    0xcb99: {"VOCABULARY", 0x0002, Word},
+    0xcbc1: {"_FORTH", 0x0002, WordDef },
+    0xcbcb: {"FORTH", 0x0002, Word},
+    0xcbd5: {"_ASSEMBLER", 0x0002, WordDef},
+    0xcbe3: {"ASSEMBLER", 0x0002, Word},
+    0xcbeb: {"_DEFINITIONS", 0x0002, WordDef},
+    0xcbfb: {"DEFINITIONS", 0x0002, Word},
+    0xcc07: {"_OBRAC", 0x0002, WordDef},
+    0xcc0d: {"OBRAC", 0x0002, Word},
+    0xcc44: {"_OB", 0x0002, WordDef},
+    0xcc4e: {"OB", 0x0002, Word},
+    0xcc16: {"_QUIT", 0x0002, WordDef},
+    0xcc1f: {"QUIT", 0x0002, Word},
+    0xccb2: {"_COLD", 0x0002, WordDef},
+    0xccbb: {"_STOD", 0x0002, WordDef},
+    0xccc4: {"_PLUSMINUS", 0x0002, WordDef},
+    0xcccb: {"_DPLUSMINUS", 0x0002, WordDef},
+    0xccd3: {"_ABS", 0x0002, WordDef},
+    0xccdb: {"_DABS", 0x0002, WordDef},
+    0xcce4: {"_MIN", 0x0002, WordDef},
+    0xccec: {"_MAX", 0x0002, WordDef},
+    0xccf4: {"_MMUL", 0x0002, WordDef},
+    0xccfb: {"_MDIV", 0x0002, WordDef},
+    0xcd02: {"_MUL", 0x0002, WordDef},
+    0xcd08: {"_DIVMOD", 0x0002, WordDef},
+    0xcd11: {"_DIV", 0x0002, WordDef},
+    0xcd17: {"_MOD", 0x0002, WordDef},
+    0xcd1f: {"_MULDIVMOD", 0x0002, WordDef},
+    0xcd29: {"_MULDIV", 0x0002, WordDef},
+    0xcd30: {"_MMOD", 0x0002, WordDef},
+    0xcd3a: {"_PLUSBUF", 0x0002, WordDef},
+    0xcd43: {"PLUSBUF", 0x0002, Word},
+    0xcd69: {"_UPDATE", 0x0002, WordDef},
+    0xcd74: {"UPDATE", 0x0002, Word},
+    0xcd8a: {"_EMPTYBUFFERS", 0x0002, WordDef},
+    0xcd9c: {"EMPTYBUFFERS", 0x0002, Word},
+    0xcdb6: {"_BUFFER", 0x0002, WordDef},
+    0xcdc1: {"BUFFER", 0x0002, Word},
+    0xce01: {"_BLOCK", 0x0002, WordDef},
+    0xce0b: {"BLOCK", 0x0002, Word},
+    0xce61: {"_FLUSH", 0x0002, WordDef},
+    0xce6b: {"FLUSH", 0x0002, Word},
+    0xce8d: {"_DUMP", 0x0002, WordDef},
+    0xce96: {"DUMP", 0x0002, Word},
+    0xcece: {"_PLINE", 0x0002, WordDef},
+    0xced9: {"PLINE", 0x0002, Word},
+    0xcef3: {"_DOTLINE", 0x0002, WordDef},
+    0xcefd: {"DOTLINE", 0x0002, Word},
+    0xcf07: {"_GTLINE", 0x0002, WordDef},
+    0xcf11: {"GTLINE", 0x0002, Word},
+    0xcf36: {"_FMESSAGE", 0x0002, WordDef},
+    0xcf42: {"FMESSAGE", 0x0002, Word},
+    0xcf92: {"_LOAD", 0x0002, WordDef},
+    0xcf9b: {"LOAD", 0x0002, Word},
+    0xcfc3: {"_ARROW", 0x0002, WordDef},
+    0xcfcb: {"ARROW", 0x0002, Word},
+    0xcfe6: {"_SUBBCD", 0x0002, WordDef},
+    0xcfef: {"SUBBCD", 0x0002, Word},
+    0xd001: {"_BBUF", 0x0002, WordDef},
+    0xd00b: {"BBUF", 0x0002, Word},
+    0xd00f: {"_BSCR", 0x0002, WordDef},
+    0xd019: {"BSCR", 0x0002, Word},
+    0xd01d: {"_RW", 0x0002, WordDef},
+    0xd025: {"RW", 0x0002, Word},
+    0xd02f: {"_DISK", 0x0002, WordDef},
+    0xd038: {"_SELECT", 0x0002, WordDef},
+    0xd043: {"_DREAD", 0x0002, WordDef},
+    0xd04d: {"_DWRITE", 0x0002, WordDef},
+    0xd058: {"_INIT", 0x0002, WordDef},
+    0xd061: {"_SEEK", 0x0002, WordDef},
+    0xd06a: {"_TICK", 0x0002, WordDef},
+    0xd070: {"TICK", 0x0002, Word},
+	0xd080: {"_HC", 0x0002, WordDef},
+	0xd088: {"HC", 0x0002, Word},
+    0xd0b4: {"_HWORD", 0x0002, WordDef},
+    0xd0be: {"HWORD", 0x0002, Word},
+    0xd106: {"_QKERNEL", 0x0002, WordDef},
+    0xd112: {"QKERNEL", 0x0002, Word},
+    0xd13d: {"_AUTOSTART", 0x0002, WordDef},
+    0xd14b: {"AUTOSTART", 0x0002, Word},
+    0xd17c: {"_FORGET", 0x0002, WordDef},
+    0xd187: {"FORGET", 0x0002, Word},
+	0xd21e: {"_BEGIN", 0x0002, WordDef},
+    0xd228: {"BEGIN", 0x0002, Word},
+	0xd232: {"_FENDIF", 0x0002, WordDef},
+    0xd23c: {"FENDIF", 0x0002, Word},
+    0xd250: {"_FTHEN", 0x0002, WordDef},
+    0xd259: {"FTHEN", 0x0002, Word},
+    0xd25f: {"_FDO", 0x0002, WordDef},
+    0xd266: {"FDO", 0x0002, Word},
+    0xd272: {"_LOOP", 0x0002, WordDef},
+    0xd27b: {"LOOP", 0x0002, Word},
+    0xd289: {"_PLOOP", 0x0002, WordDef},
+    0xd293: {"PLOOP", 0x0002, Word},
+	0xd2a1: {"_FUNTIL", 0x0002, WordDef},
+    0xd2ab: {"FUNTIL", 0x0002, Word},
+	0xd2b9: {"_FEND", 0x0002, WordDef},
+    0xd2c1: {"FEND", 0x0002, Word},
+	0xd2c7: {"_AGAIN", 0x0002, WordDef},
+    0xd2d1: {"AGAIN", 0x0002, Word},
+	0xd2df: {"_FREPEAT", 0x0002, WordDef},
+    0xd2ea: {"FREPEAT", 0x0002, Word},
+	0xd2fc: {"_FIF", 0x0002, WordDef},
+	0xd303: {"FIF", 0x0002, Word},
+	0xd313: {"_FELSE", 0x0002, WordDef},
+	0xd31c: {"FELSE", 0x0002, Word},
+	0xd336: {"_FWHILE", 0x0002, WordDef},
+	0xd340: {"FWHILE", 0x0002, Word},
+    0xd348: {"_SPACES", 0x0002, WordDef},
+    0xd353: {"_LTNUM", 0x0002, WordDef},
+    0xd35a: {"_NUMGT", 0x0002, WordDef},
+    0xd361: {"_SIGN", 0x0002, WordDef},
+    0xd36a: {"_NUM", 0x0002, WordDef},
+    0xd370: {"_NUMS", 0x0002, WordDef},
+    0xd377: {"_DDOTR", 0x0002, WordDef},
+    0xd37f: {"_DDOT", 0x0002, WordDef},
+    0xd386: {"_DOTR", 0x0002, WordDef},
+    0xd38d: {"_DOT", 0x0002, WordDef},
+    0xd393: {"_Q", 0x0002, WordDef},
+    0xd399: {"_FLIST", 0x0002, WordDef},
+    0xd3a2: {"FLIST", 0x0002, Word},
+    0xd3e4: {"_INDEX", 0x0002, WordDef},
+    0xd3ee: {"INDEX", 0x0002, Word},
+    0xd453: {"_VLIST", 0x0002, WordDef},
+    0xd45d: {"VLIST", 0x0002, Word},
+    0xd499: {"_MON", 0x0002, WordDef},
+    0xd4a1: {"MON", 0x0002, Word},
+    0xd4a7: {"_DOTS", 0x0002, WordDef},
+    0xd4ae: {"DOTS", 0x0002, Word},
+    0xd4e7: {"_CCON", 0x0002, WordDef},
+    0xd4f1: {"CCON", 0x0002, Word},
+	0xd5e6: {"_SCDR", 0x0002, WordDef},
+	0xd5ef: {"SCDR", 0x0002, Word},
+
+	0xd5f3: {"QQQ", 0x0001, Bytes},
+	
+	0xd5f4: {"_MEMTOP", 0x0002, WordDef},
+    0xd5ff: {"MEMTOP", 0x0002, Word},
+    0xd615: {"_CASEPAD", 0x0001, Bytes},
+    0xd616: {"_CASE", 0x0002, WordDef},
+    0xd620: {"CASE", 0x0002, Word},
+    0xd63a: {"_EECSTOR", 0x0002, WordDef},
+    0xd643: {"_BANKCSTOR", 0x0002, WordDef},
+    0xd64e: {"_BANKCAT", 0x0002, WordDef},
+    0xd659: {"_BANKEECSTOR", 0x0002, WordDef},
+    0xd666: {"_BANKEXECUTE", 0x0002, WordDef},
+    0xd676: {"_FMTRK", 0x0002, WordDef},
+    0xd680: {"FMTRK", 0x0002, Word},
+    0xd7c6: {"_FORMAT", 0x0002, WordDef},
+    0xd7d1: {"FORMAT", 0x0002, Word},
+    0xd7ff: {"_DUMP", 0x0002, WordDef},
+    0xd809: {"DUMP", 0x0002, Word},
+    0xd83f: {"_ADMP", 0x0002, WordDef},
+    0xd848: {"ADMP", 0x0002, Word},
+    0xd891: {"CODE1", 0x0002, Word},
+	0xd89b: {"CODE2", 0x0002, Word},
+	0xd8ca: {"NAMES", 0x0011, String},
+	0xd8db: {"Z1", 0x0001, Bytes},
+	0xd8dc: {"CRIGHT", 0x0018, String},
+    0xd8f4: {"_N", 0x0002, WordDef},
+    0xd8fa: {"N", 0x0002, Word},
+    0xd8fe: {"_IP", 0x0002, WordDef},
+    0xd905: {"IP", 0x0002, Word},
+
+    0xd909: {"_W", 0x0002, WordDef},
+    0xd90f: {"W", 0x0002, Word},
+    0xd913: {"_UP", 0x0002, WordDef},
+    0xd91a: {"UP", 0x0002, Word},
+    0xd91e: {"_XSAVE", 0x0002, WordDef},
+    0xd928: {"XSAVE", 0x0002, Word},
+    0xd92c: {"_NEXT", 0x0002, WordDef},
+    0xd935: {"NEXT", 0x0002, Word},
+    0xd939: {"_PUSH", 0x0002, WordDef},
+    0xd942: {"PUSH", 0x0002, Word},
+    0xd946: {"_PUT", 0x0002, WordDef},
+    0xd94e: {"PUT", 0x0002, Word},
+    0xd952: {"_POP", 0x0002, WordDef},
+    0xd95a: {"POP", 0x0002, Word},
+    0xd95e: {"_POPTWO", 0x0002, WordDef},
+    0xd969: {"POPTWO", 0x0002, Word},
+    0xd96d: {"_PUSH0A", 0x0002, WordDef},
+    0xd978: {"PUSH0A", 0x0002, Word},
+    0xd97c: {"_PUT0A", 0x0002, WordDef},
+    0xd986: {"PUT0A", 0x0002, Word},
+    0xd98a: {"_BINARY", 0x0002, WordDef},
+    0xd995: {"BINARY", 0x0002, Word},
+    0xd999: {"_SETUP", 0x0002, WordDef},
+    0xd9a3: {"SETUP", 0x0002, Word},
+	0xd9a7: {"UNK1", 0x0020, Bytes},
+    0xd9c7: {"UNK2", 0x0002, Word},
+    0xd9cf: {"DOTA", 0x0002, WordDef},
+    0xd9ee: {"UNK3", 0x0002, Word},
+    0xd9fa: {"UNK4", 0x0002, Word},
+    0xda06: {"UNK5", 0x0002, Word},
+    0xda12: {"UNK6", 0x0002, Word},
+    0xda1e: {"UNK7", 0x0002, Word},
+    0xda36: {"UNK8", 0x0002, Word},
+    0xda3e: {"_SECC", 0x0002, WordDef},
+    0xda46: {"SECC", 0x0002, Word},
+    0xda4e: {"RP", 0x0002, Word},
+    0xda60: {"UNK9", 0x0002, Word},
+    0xdb1c: {"_BRKC", 0x0002, WordDef},
+    0xdb25: {"BRKC", 0x0002, Word},
+    // 0xdc42: {"OP", 0x0002, WordDef},
+    0xdde9: {"UNKA_", 0x0001, Bytes},
+    0xddea: {"_SMBC", 0x0002, WordDef},
+    0xddf3: {"SMBC", 0x0002, Word},
+    0xde22: {"_RMBC", 0x0002, WordDef},
+    0xde2b: {"RMBC", 0x0002, Word},
+    0xde70: {"_BITCLR", 0x0002, WordDef},
+    0xde7b: {"BITCLR", 0x0002, Word},
+    0xdea2: {"PADA2", 0x0001, Bytes},
+    0xdea3: {"_FUNTIL", 0x0002, WordDef},
+    0xdeae: {"FUNTIL", 0x0002, Word},
+    0xdec4: {"_FWHILE", 0x0002, WordDef},
+    0xdecf: {"FWHILE", 0x0002, Word},
+    0xdedd: {"_AGAIN", 0x0002, WordDef},
+    0xdee8: {"AGAIN", 0x0002, Word},
+    0xdef2: {"_FREPEAT", 0x0002, WordDef},
+    0xdefe: {"FREPEAT", 0x0002, Word},
+    0xdf18: {"_FIF", 0x0002, WordDef},
+    0xdf20: {"FIF", 0x0002, Word},
+    0xdf2e: {"_FENDIF", 0x0002, WordDef},
+    0xdf39: {"FENDIF", 0x0002, Word},
+    0xdf5b: {"_THEN", 0x0002, WordDef},
+    0xdf65: {"THEN", 0x0002, Word},
+    0xdf6b: {"_FELSE", 0x0002, WordDef},
+    0xdf75: {"FELSE", 0x0002, Word},
+    0xdf95: {"_NOT", 0x0002, WordDef},
+    0xdf9d: {"NOT", 0x0002, Word},
+    0xdfa5: {"_CS", 0x0002, WordDef},
+    0xdfac: {"CS", 0x0002, Word},
+	0xdfb0: {"_VS", 0x0002, WordDef},
+    0xdfb7: {"VS", 0x0002, Word},
+	0xdfbb: {"_VS1", 0x0002, WordDef},
+	0xdfc2: {"VS1", 0x0002, Word},
+	0xdfc6: {"_VS2", 0x0002, WordDef},
+	0xdfcd: {"VS2", 0x0002, Word},
+    0xdfd1: {"_ENDCODE", 0x0002, WordDef},
+    0xdfde: {"ENDCODE", 0x0002, Word},
+
+	0xdff0: {"_TASK", 0x0002, WordDef},
+	0xdff9: {"TASK", 0x0002, Word},
+
+	0xdffd: {"PADDINGD", 0x0002, Bytes}, 
+
 }
 
 var f *os.File
@@ -604,6 +1093,7 @@ var indXCount = 0
 var indYCount = 0
 
 var printaddr = true
+var gosrc *os.File
 
 func praddr() {
 	 praddra(addr)
@@ -615,14 +1105,41 @@ func praddra(a int) {
 	}
 }
 
-func prword() {
-	word()
+func prbyte() {
+	label, ok := datalist[int(b)]
+	if ok {
+		fmt.Printf("%s", label.label)
+	} else {
+		label, ok = kernel_datalist[int(b)]
+		if ok {
+			fmt.Printf("K%s", label.label)
+		} else {
+			fmt.Printf("$%02x", b)
+		}
+	}
+}
+
+func prwordw(w int) {
 	label, ok := datalist[w]
 	if ok {
-	   fmt.Printf("%s\n", label.label)
+	   fmt.Printf("%s", label.label)
 	} else {
-	   fmt.Printf("$%04x\n", w)
+		label, ok = kernel_datalist[w]
+		if ok {
+			fmt.Printf("K%s", label.label)
+		} else {
+			label, ok = kernel_datalist[w-2]
+			if ok {
+				fmt.Printf("K%s+2", label.label)
+			} else {
+				fmt.Printf("$%04x", w)
+			}
+		}
 	}
+}
+
+func prword() {
+	prwordw(w)
 }
 
 func offset(b byte) (int) {
@@ -634,6 +1151,13 @@ func offset(b byte) (int) {
 }
 
 func outln() {
+	if blockdata.dt == NextWord {
+		if ((b & 0xf0) == 0x80) {
+			blockdata.dt = WordDef
+		} else {
+			blockdata.dt = Word
+		}
+	}
 	if dolabel {
 		if blockdata.dt == Word {
 			for i := 0; i < 3; i++ {
@@ -646,7 +1170,7 @@ func outln() {
 	} else if datalist[addr].dt == Label { 
 	    praddr(); fmt.Printf(";\n")
 	    praddr(); fmt.Printf("%s: ", datalist[addr].label)
-	} else {
+	} else if blockdata.dt != WordDef {
 	  	praddr()
 		fmt.Printf("          ")
 	}
@@ -670,48 +1194,89 @@ func outln() {
 	case String:
 		fmt.Printf("data.b \"")
 		for i := 0; i < blockdata.length; i++ {
-			fmt.Printf("%s", string(b))
+			if b == 0x22 {
+				fmt.Printf("\\\"")
+			} else {
+				fmt.Printf("%s", string(b))
+			}
 			if i < blockdata.length-1 { next() }
 		}			
 		fmt.Printf("\"\n")
 	case Vector:
 		fmt.Printf("        data.w ")
+		word()
 		prword()
+		fmt.Println()
 	case Address:
 		fmt.Printf("data.w ")
+		word()
 		prword()
+		fmt.Println()
 	case Word:
 		fmt.Printf("        data.w ")
 		word()
+		str := ""
 		label, ok := datalist[w]
 		if ok {
-			fmt.Printf("%s\n", label.label)
-			if label.label == "CLIT" {
+			str = label.label
+		} else {
+			label, ok = kernel_datalist[w]
+			if ok {
+				str = "K" + label.label
+			} else {
+				label, ok = kernel_datalist[w-2]
+				if ok {
+					str = "K" + label.label + "+2"
+				} else {
+					str = label.label
+				}
+			}
+		}
+
+		if ok {
+			fmt.Printf("%s\n", str)
+			if str == "KCLIT" {
 				next()
 				praddr()
-				fmt.Printf("        data.b $%02x\n", b)
-			} else if label.label == "BRAN" {
-			    word()
-				praddr(); fmt.Printf("        data.w $%04x\n", w)
-			} else if label.label == "ZBRAN" {
-			    word()
-				praddr(); fmt.Printf("        data.w $%04x\n", w)
-			} else if label.label == "DOUSE" {
+				fmt.Printf("                  data.b $%02x\n", b)
+			} else if str == "KBRAN" {
 				next()
-				praddr(); fmt.Printf("        data.b $%02x\n", b)
-			} else if label.label == "PDOTQ" {
+				praddr()
+			    word()
+				fmt.Printf("                  data.w $%04x\n", w)
+			} else if str == "KZBRAN" {
+				next()
+			    praddr()
+				word()
+				fmt.Printf("                  data.w $%04x\n", w)
+			} else if str == "KDOUSE" {
+				next()
+				praddr()
+				fmt.Printf("                  data.b $%02x\n", b)
+				blockdata.dt = WordDef
+			} else if str == "KDOCON" {
+				next()
+				praddr()
+				word()
+				fmt.Printf("                  data.w $%04x\n", w)
+				blockdata.dt = WordDef
+			} else if str == "KPDOTQ" {
 			    next()
 				len := int(b)
-				praddr(); fmt.Printf("        data.b $%02x, \"", b)
+				praddr()
+				fmt.Printf("                  data.b $%02x, \"", b)
 				next()
 				for i := 0; i < len; i++ {
 					fmt.Printf("%s", string(b))
 					if i < len-1 { next() }
 				}
 				fmt.Printf("\"\n")
+			} else if str == "KSEMIS" {
+				blockdata.dt = NextWord
 			}
 		} else {
-		  	fmt.Printf("$%04x\n", w)
+			prword()
+			fmt.Println()
 		}
 		if dolabel && (w > addr) && (w < addr + 8) { // If we are in a close range assume code
 			blockdata.dt = Code
@@ -721,28 +1286,49 @@ func outln() {
 		def := b
 		len := int(def) & 0xf
  		str := ""
+		encstr := ""
 		for i:=0; i<len; i++ {
 			next()
 			str += string(b & 0x7f)
+			if (b & 0x7f) == 0x22 {
+				encstr += "\\\""
+			} else if (b & 0x7f) == 0x00 {
+				encstr += "\\0"
+			} else {
+				encstr += string(b & 0x7f)
+			}
 		}
 		next()
 		praddra(saveaddr); fmt.Printf(";;\n")
 		praddra(saveaddr); fmt.Printf(";;    %s\n", str)
 		praddra(saveaddr); fmt.Printf(";;\n")
-		 // B should have MSB set
-//		praddra(saveaddr); fmt.Printf("        data.b $%02x\n", def)
-		praddra(saveaddr); fmt.Printf("        data.7 $%02x, \"%s\"\n", def, str)
+		 // def should have MSB set
+		praddra(saveaddr); prwordw(saveaddr);
+		fmt.Printf("             text.7 $%02x, \"%s\"\n", def, encstr)
+
+		fmt.Fprintf(gosrc, "    0x%04x: {\"%s\", 0x0002, WordDef},\n", saveaddr+8, str)
+
+		// link field
 		praddr()
 		word()
-		fmt.Printf("        data.w $%04x    ; link to %s\n", w, lastword)
+		fmt.Printf("                  data.w ")
+		prword()
+		fmt.Printf("    ; link to %s\n", lastword)
 		lastword = str
-		
+
+		// pfaptr
+		next()
 		praddr()
-		blockdata.dt = Word
-//		cfa := int(b)
-//		next()
-//		cfa += int(b) << 8
-//		fmt.Printf("        data.w $%04x\n", cfa)
+		word()
+		fmt.Printf("                  data.w ")
+		prword()
+		fmt.Printf("    ; PFAPTR\n")
+
+		if w == (addr - 1) {
+			blockdata.dt = Word
+		} else if w == (addr + 3) {
+			blockdata.dt = Word
+		}
 	case Code:
 		opcode := instr[b].opcode
 		fmt.Printf("%s ", opcode)
@@ -751,86 +1337,63 @@ func outln() {
 			next()
 			fmt.Printf("#$%02x\n", b)
 		case Absolute: // 3 bytes
+			next()
 			word()
-			label, ok := datalist[int(w)]
-			if ok {
-				fmt.Printf("%s\n", label.label)
-			} else {
-				fmt.Printf("$%04x\n", w)
-			}
+			prword()
+			fmt.Println()
 		case ZeroPage: // 2 bytes
 			next()
-			label, ok := datalist[int(b)]
-			if ok {
-				fmt.Printf("%s\n", label.label)
-			} else {
-				fmt.Printf("$%02x\n", b)
-			}
+			prbyte()
+			fmt.Println()
 		case Accumulator: // 1 byte
 			fmt.Printf("A\n")
 		case Implied: // 1 byte
 			fmt.Printf("\n")
 		case IndX: // 2 bytes
 			next()
-			label, ok := datalist[int(b)]
-			if ok {
-				fmt.Printf("(%s,X)\n", label.label)
-			} else {
-				fmt.Printf("($%02x,X)\n", b)
-			}
+			fmt.Printf("(")
+			prbyte()
+			fmt.Printf(",X)\n")
 			indXCount++
 		case IndY: // 2 bytes
 			next()
-			label, ok := datalist[int(b)]
-			if ok {
-				fmt.Printf("(%s),Y\n", label.label)
-			} else {
-				fmt.Printf("($%02x),Y\n", b)
-			}
+			fmt.Printf("(")
+			prbyte()
+			fmt.Printf("),Y\n")
 			indYCount++
 		case ZeroPageX: // 2 bytes
 			next()
-			label, ok := datalist[int(b)]
-			if ok {
-				fmt.Printf("%s,X\n", label.label)
-			} else {
-			  fmt.Printf("$%02x,X\n", b)
-			}
+			prbyte()
+			fmt.Printf(",X\n")
 		case ZeroPageY: // 2 bytes
 			next()
-			label, ok := datalist[int(b)]
-			if ok {
-				fmt.Printf("(%s,Y)\n", label.label)
-			} else {
-			  fmt.Printf("($%02x,Y)\n", b)
-			}
+			fmt.Printf("(")
+			prbyte()
+			fmt.Printf(",Y)\n")
 		case AbsoluteX: // 3 bytes
+			next()
 			word()
-			fmt.Printf("$%04x,X\n", w)
+			prword()
+			fmt.Printf(",X\n")
 		case AbsoluteY: // 3 bytes
+			next()
 			word()
-			fmt.Printf("$%04x,Y\n", w)
+			prword()
+			fmt.Printf(",Y\n")
 		case Relative: // 2 bytes
 			next()
 			fmt.Printf("$%04x\n", offset(b))
-		case Indirect: // 3 bytes 
+		case Indirect: // 3 bytes
+			next()
 			word()
-			label, ok := datalist[w]
-			if ok {
-				fmt.Printf("(%s)\n", label.label)
-			} else {
-				fmt.Printf("($%04x)\n", w)
-			}
+			fmt.Printf("(")
+			prword()
+			fmt.Printf(")\n", w)
 		case BitAddress: // 3 bytes
 			next()
-			a := int(b)
+			prbyte()
 			next()
-			label, ok := datalist[a]
-			if ok {
-				fmt.Printf("%s, $%04x    ;$%02x\n", label.label, offset(b), b)
-			} else {
-				fmt.Printf("$%02x, $%04x    ;$%02x\n", a, offset(b), b)
-			}
+			fmt.Printf(", $%04x    ;$%02x\n", offset(b), b)
 		}
 	}
 	dolabel = false
@@ -848,20 +1411,21 @@ func word() {
 	w = int(b)
 	next()
 	w = w + int(b) << 8
-	next()
 }
 
 func main()  {
-
-	org := 0xf000
-	rom := "R65FK3P.BIN"
-	datalist = kernel_datalist
+	gosrc, _ = os.Create("cmd/gen.go")
+	defer gosrc.Close()
 	
-	//org := 0xc000
-	//rom := "R65FR3P.BIN"
-	//datalist = development_datalist
-	//lastword = "previous. Last link marked by zero."
-	// printaddr = false
+	// org := 0xf000
+	// rom := "roms/R65FK3P.BIN"
+	// datalist = kernel_datalist
+	
+	org := 0xc000
+	rom := "roms/R65FR3P.BIN"
+	datalist = development_datalist
+	lastword = "previous. Last link marked by zero."
+	printaddr = false
 	
 	f, err = os.Open(rom)
 	if err != nil {
@@ -874,19 +1438,19 @@ func main()  {
 	fmt.Printf("        org := $%04x\n\n", org)
 	
 	// Output registers
-	keys := make([]int, 0, len(datalist))
+	keys := make([]int, 0, len(kernel_datalist))
  
-    for k := range datalist{
+    for k := range kernel_datalist{
         keys = append(keys, k)
     }
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i] < keys[j]
 	})
     for _, key := range keys {
-		val := datalist[key]
-		if val.dt == Register {
-			fmt.Printf("        %s := $%04x\n", val.label, key)
-		}
+		val := kernel_datalist[key]
+		//if val.dt == Register {
+			fmt.Printf("        K%s := $%04x\n", val.label, key)
+		//}
 	}
 	fmt.Printf("\n\n")
 	
