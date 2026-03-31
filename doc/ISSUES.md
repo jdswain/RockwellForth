@@ -1,29 +1,29 @@
-* L28
-x Did we start with the 6501 version of the 65C02 version. If 01 then we have some untangling to do of the stack.
-x Check the listing to make sure the vectors are correct.
-Optimise by making use of all new instructions.
-Move useful functions (and drivers) into kernel ROM, use up the 8k. Include Console, Font etc. so Basic and others can use a simple console.
+# Forth Words
+x Bank words
+Serial send and receive words
+Add floating point support: https://gforth.org/manual/Floating-Point-Tutorial.html
 
-Define all L28 registers
-Update em16 to be comprehensive L28 emulator
-
-# IO
-## Serial
-## LCD
-Init
-fill
-moveto
-lineto
-drawstring
-scroll
-setfont
-
-## Keyboard
-interrupt on keypress
-scankey
-
-## Disk
-Should be easy
+# Keyboard
+Update keymap to our custom keymap
+Lower case
+Add cursor
 
 
-Update so kernel is 8k and Development is 8k
+# Possible Later
+ Key autorepeat
+ Arrow key support
+ Add RES and NMI buttons.
+ Update machine specific words
+ Consider changing screen size to 32x8
+ Disk boot
+ Assembler vlist
+ L28 register words
+: pat x y w h p0 p1 p2 p3 p4 p5 p6 p7 --
+
+# Done
+x VARIABLE and CONSTANT
+x Disk not working
+x Test Disk
+x make setpixel and clearpixel words
+x : fill x y w h c --
+

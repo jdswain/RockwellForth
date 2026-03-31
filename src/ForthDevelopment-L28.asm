@@ -5,7 +5,7 @@
 	message org
 	section "development"
 	
-    org := $c000
+    org := $a000
 
 ;;
 ;;	The kernel searches for this identifier on every 1k boundary.
@@ -522,11 +522,16 @@ CONSTANT:	DATA.W (CONSTANT+2)
 			PHI
                 			JPI (CREATE)
                 			JPI (SMUDGE)
-    						JPI (COMMA)
+                			JPI (DROP)		; discard CFA addr left by CREATE
+                			JPI (CLIT)
+                			data.b $00, $20, $00	; JSR opcode
+                			JPI (CCOMMA)
                 			JPI (LIT)
                 			data.b $00
                 			data.w DOCON
-                			JPI (DCSTOR)
+                			JPI (COMMA)		; write DOCON address
+                			JPI (COMMA)		; write constant value
+                			JPI (SEMIS)
 ;;
 ;;    VARIABLE
 ;;
@@ -538,11 +543,18 @@ _VARIABLE       text.7 $88, "VARIABLE"
 ;;
 VARIABLE:	DATA.W (VARIABLE+2)
 			PHI
-                			JPI (CONSTANT)
+                			JPI (CREATE)
+                			JPI (SMUDGE)
+                			JPI (DROP)		; discard CFA addr left by CREATE
+                			JPI (CLIT)
+                			data.b $00, $20, $00	; JSR opcode
+                			JPI (CCOMMA)
                 			JPI (LIT)
                 			data.b $00
                 			data.w DOVAR
-                			JPI (DCSTOR)
+                			JPI (COMMA)		; write DOVAR address
+                			JPI (COMMA)		; write initial value from stack
+                			JPI (SEMIS)
 ;;
 ;;    CODE
 ;;
@@ -574,11 +586,16 @@ USER:	DATA.W (USER+2)
 			PHI
                 			JPI (CREATE)
                 			JPI (SMUDGE)
+                			JPI (DROP)		; discard CFA addr left by CREATE
+                			JPI (CLIT)
+                			data.b $00, $20, $00	; JSR opcode
                 			JPI (CCOMMA)
                 			JPI (LIT)
                 			data.b $00
                 			data.w DOUSE
-                			JPI (DCSTOR)
+                			JPI (COMMA)		; write DOUSE address
+                			JPI (CCOMMA)		; write user variable offset
+                			JPI (SEMIS)
 
 ;;
 ;;    0
@@ -819,7 +836,7 @@ HEADERLESS:	DATA.W (HEADERLESS+2)
 ;;
 _VOCL           text.7 $88, "VOC-LINK"
                 data.w _HEADERLESS    ; link to HEADERLESS
-                data.w VOCL+3    ; (Doesn't seem right)
+                data.w VOCL    ; (Doesn't seem right)
 ;;
 ;;
 ;;
@@ -941,7 +958,7 @@ _MODE           text.7 $84, "MODE"
 
 MODE:	DATA.W (MODE+2)
 			JSR DOUSE	
-    			data.b N-1
+    			data.b $50
 ;;
 ;;    KHZ
 ;;
@@ -950,8 +967,8 @@ _KHZ            text.7 $83, "KHZ"
     			data.w KHZ    ; PFAPTR
 
 KHZ:	DATA.W (KHZ+2)
-			JSR DOUSE	
-    			data.b N+1
+			JSR DOUSE
+    			data.b $52
 ;;
 ;;    C/L
 ;;
@@ -1812,9 +1829,16 @@ L_ERR_1	JPI (HERE)
                   			JPI (AT)
                   			JPI (BLK)
                   			JPI (AT)
-L1684	JPI (LIT)
+L1684
+	if CONSOLE_MODE {
+	JPI (LIT)
                   			data.b $00
-                  			data.w XKEY
+                  			data.w CONKEY
+	} else {
+	JPI (LIT)
+                  			data.b $00
+                  			data.w L518
+	}
                   			JPI (CLIT)
                   data.b $00, $44, $00
                   			JPI (STORE)
@@ -2030,15 +2054,17 @@ _QSTACK         text.7 $86, "?STACK"
 QSTACK:	DATA.W (QSTACK+2)
 			PHI
     						JPI (SPAT)
-    						JPI (CLIT)
-    			data.b $00, $c2, $00
+    						JPI (LIT)
+    			data.b $00
+    			data.w $02c2
     						JPI (SWAP)
     						JPI (ULESS)
     						JPI (ONE)
     						JPI (QERROR)
     						JPI (SPAT)
-    						JPI (CLIT)
-    			data.b $00, $5d, $00
+    						JPI (LIT)
+    			data.b $00
+    			data.w $025d
     						JPI (ULESS)
     						JPI (CLIT)
     			data.b $00, $07, $00
@@ -2241,7 +2267,7 @@ ABORT:	DATA.W (ABORT+2)
     						JPI (SPSTO)
     						JPI (CR)
     						JPI (PDOTQ)
-    			data.b $0f, " RSC-FORTH V3.0"
+    			data.b $0e, "RSC-FORTH V3.0"
     						JPI (FORTH)
     						JPI (DEFINITIONS)
     						JPI (QUIT)
@@ -2278,13 +2304,17 @@ KSTART:			PHI
                   			JPI (CMOVE)
                   			JPI (LIT)
                   			data.b $00
-                  			data.w _TASK
+                  			data.w _CONTRAST
                   			JPI (LIT)
                   			data.b $00
                   			data.w $0404
                   			JPI (CLIT)
-                  data.b $00, $0b, $00
+                  data.b $00, $0d, $00	; NFA(9) + LFA(2) + PFAPTR(2) = 13
                   			JPI (CMOVE)
+                  			JPI (LIT)
+                  			data.b $00
+                  			data.w $a000
+                  			JPI (MEMTOP)
 L_ABORT_1	JPI (CLDWRM)
                   			JPI (STORE)
                   			JPI (ABORT)
@@ -2611,7 +2641,7 @@ L_DDUMP_2	JPI (CR)
                   			JPI (DDOTR)
                   			JPI (SPACE)
                   			JPI (CLIT)
-                  data.b $00, $10, $00
+                  data.b $00, $08, $00
                   			JPI (SWAP)
                   			JPI (OVER)
                   			JPI (ZERO)
@@ -3042,7 +3072,7 @@ AUTOSTART:	DATA.W (AUTOSTART+2)
                   			JPI (DUP)
                   			JPI (LIT)
                   			data.b $00
-                  			data.w FX+3
+                  			data.w FX
                   			JPI (EQUAL)
                   			JPI (ZBRAN)
                   			data.b $00
@@ -3557,40 +3587,94 @@ _VLIST             text.7 $85, "VLIST"
 ;;
 ;;
 VLIST:	DATA.W (VLIST+2)
-			PHI
-                  			JPI (BASE)
-                  			JPI (AT)
-                  			JPI (HEX)
-                  			JPI (CR)
-                  			JPI (CONTEXT)
-                  			JPI (AT)
-                  			JPI (AT)
-L_VLIST_2	JPI (INDEX2)
-                  			JPI (INDEX1)
-                  			JPI (ZBRAN)
-                  			data.b $00
-                  			data.w (L_VLIST_1 - addr)
-                  			JPI (INDEX2)
-                  			JPI (INDEX1)
-                  			JPI (ZBRAN)
-                  			data.b $00
-                  			data.w (L_VLIST_1 - addr)
-                  			JPI (INDEX2)
-                  			JPI (INDEX1)
-                  			JPI (ZBRAN)
-                  			data.b $00
-                  			data.w (L_VLIST_1 - addr)
-                  			JPI (INDEX2)
-                  			JPI (CR)
-                  			JPI (INDEX1)
-                  			JPI (ZEQ)
-                  			JPI (ZBRAN)
-                  			data.b $00
-                  			data.w (L_VLIST_2 - addr)
-L_VLIST_1	JPI (DROP)
-                  			JPI (BASE)
-                  			JPI (STORE)
-                  			JPI (SEMIS)
+		PHI
+	; Stack: ( saved-base nfa counter )
+		JPI (BASE)
+		JPI (AT)
+		JPI (HEX)
+		JPI (CR)
+		JPI (CONTEXT)
+		JPI (AT)
+		JPI (AT)		; ( saved-base nfa )
+		JPI (LIT)
+		data.b $00
+		data.w 19		; ( saved-base nfa 19 )
+	; --- main loop: 2 entries per line ---
+.VL_ROW:	JPI (SWAP)		; ( saved-base counter nfa )
+		JPI (INDEX2)
+		JPI (INDEX1)		; ( saved-base counter nfa' flag )
+		JPI (ZBRAN)
+		data.b $00
+		data.w (.VL_QUIT - addr)
+		JPI (INDEX2)
+		JPI (CR)
+		JPI (INDEX1)		; ( saved-base counter nfa' flag )
+		JPI (ZBRAN)
+		data.b $00
+		data.w (.VL_QUIT - addr)
+		JPI (SWAP)		; ( saved-base nfa counter )
+		JPI (ONEMINUS)		; decrement line counter
+		JPI (DUP)
+		JPI (ZBRAN)		; counter = 0? → page full
+		data.b $00
+		data.w (.VL_PAGE - addr)
+		JPI (BRAN)		; counter != 0 → next row
+		data.b $00
+		data.w (.VL_ROW - addr)
+	; --- page full: prompt and wait ---
+.VL_PAGE:	JPI (DROP)		; drop 0 counter
+		JPI (PDOTQ)
+		data.b $07, " more? "
+		JPI (KEY)		; ( saved-base nfa key )
+		JPI (DUP)
+		JPI (LIT)
+		data.b $00
+		data.w $1B		; ESC
+		JPI (EQUAL)
+		JPI (SWAP)
+		JPI (LIT)
+		data.b $00
+		data.w $51		; 'Q'
+		JPI (EQUAL)
+		JPI (OR)		; ( saved-base nfa quit? )
+		JPI (ZBRAN)
+		data.b $00
+		data.w (.VL_CONT - addr)
+	; --- quit: ( saved-base nfa ) ---
+		JPI (LIT)
+		data.b $00
+		data.w $0D		; CR to column 0
+		JPI (EMIT)
+		JPI (PDOTQ)
+		data.b $08, "        "	; overwrite " more? "
+		JPI (CR)
+		JPI (DROP)		; drop nfa
+		JPI (BASE)
+		JPI (STORE)		; restore base
+		JPI (SEMIS)
+	; --- continue: ( saved-base nfa ) ---
+.VL_CONT:	JPI (LIT)
+		data.b $00
+		data.w $0D		; CR to column 0
+		JPI (EMIT)
+		JPI (PDOTQ)
+		data.b $08, "        "	; overwrite " more? "
+		JPI (LIT)
+		data.b $00
+		data.w $0D		; CR to column 0 again
+		JPI (EMIT)
+		JPI (LIT)
+		data.b $00
+		data.w 19		; push fresh counter
+		JPI (BRAN)
+		data.b $00
+		data.w (.VL_ROW - addr)
+	; --- end of dictionary: ( saved-base counter nfa ) ---
+.VL_QUIT:	JPI (DROP)		; drop nfa
+		JPI (DROP)		; drop counter
+		JPI (BASE)
+		JPI (STORE)		; restore base
+		JPI (SEMIS)
 ;;
 ;;    MON
 ;;
@@ -3672,7 +3756,7 @@ L_CCON_1	JPI (SEMIS)
 	
 _DINTFLG	text.7 $c6, "INTFLG"
 			data.w _CCON
-			data.w DINTFLG+3
+			data.w DINTFLG
 	
 DINTFLG:	DATA.W (DINTFLG+2)
 			JSR DOES	
@@ -3681,7 +3765,7 @@ DINTFLG:	DATA.W (DINTFLG+2)
 
 _FINTVEC:	text.7 $c6, "INTVEC"
 			data.w _DINTFLG
-			data.w FINTVEC+3
+			data.w FINTVEC
 
 FINTVEC:	DATA.W (FINTVEC+2)
 			JSR DOES	
@@ -3690,7 +3774,7 @@ FINTVEC:	DATA.W (FINTVEC+2)
 
 _FIRQVEC:	text.7 $c6, "IRQVEC"
 			data.w _FINTVEC
-			data.w FIRQVEC+3
+			data.w FIRQVEC
 
 FIRQVEC:	DATA.W (FIRQVEC+2)
 			JSR DOES	
@@ -3699,7 +3783,7 @@ FIRQVEC:	DATA.W (FIRQVEC+2)
 
 _FNMIVEC:	text.7 $c6, "NMIVEC"
 			data.w _FIRQVEC
-			data.w FNMIVEC+3
+			data.w FNMIVEC
 
 FNMIVEC:	DATA.W (FNMIVEC+2)
 			JSR DOES	
@@ -3708,7 +3792,7 @@ FNMIVEC:	DATA.W (FNMIVEC+2)
 
 _DPA		text.7 $c2, "PA"
 			data.w _FNMIVEC
-			data.w DPA+3
+			data.w DPA
 
 DPA:	DATA.W (DPA+2)
 			JSR DOES	
@@ -3717,7 +3801,7 @@ DPA:	DATA.W (DPA+2)
 
 _DPB		text.7 $c2, "PB"
 			data.w _DPA
-			data.w DPB+3
+			data.w DPB
 
 DPB:	DATA.W (DPB+2)
 			JSR DOES	
@@ -3726,7 +3810,7 @@ DPB:	DATA.W (DPB+2)
 
 _DPC		text.7 $c2, "PC"
 			data.w _DPB
-			data.w DPC+3
+			data.w DPC
 
 DPC:	DATA.W (DPC+2)
 			JSR DOES	
@@ -3735,7 +3819,7 @@ DPC:	DATA.W (DPC+2)
 
 _DPD		text.7 $c2, "PD"
 			data.w _DPC
-			data.w DPD+3
+			data.w DPD
 
 DPD:	DATA.W (DPD+2)
 			JSR DOES	
@@ -3744,7 +3828,7 @@ DPD:	DATA.W (DPD+2)
 
 _DPE		text.7 $c2, "PE"
 			data.w _DPD
-			data.w DPE+3
+			data.w DPE
 
 DPE:	DATA.W (DPE+2)
 			JSR DOES	
@@ -3753,7 +3837,7 @@ DPE:	DATA.W (DPE+2)
 
 _DPF		text.7 $c2, "PF"
 			data.w _DPE
-			data.w DPF+3
+			data.w DPF
 
 DPF:	DATA.W (DPF+2)
 			JSR DOES	
@@ -3762,77 +3846,77 @@ DPF:	DATA.W (DPF+2)
 
 _DPG		text.7 $c2, "PG"
 			data.w _DPF
-			data.w DPG+3
+			data.w DPG
 
 DPG:	DATA.W (DPG+2)
 			JSR DOES	
 			data.w L3375
 			data.b 0			; PortG not available on L28
 	
-_DIFR		text.7 $c3, "IFR"
+_DSIR		text.7 $c3, "SIR"
 			data.w _DPG
-			data.w DIFR+3
+			data.w DSIR
 
-DIFR:	DATA.W (DIFR+2)
-			JSR DOES	
+DSIR:	DATA.W (DSIR+2)
+			JSR DOES
 			data.w L3375
-			data.b IFR
+			data.b SIR
 
-_DIER		text.7 $c3, "IER"
-			data.w _DIFR
-			data.w DIER+3
+_DSMR		text.7 $c3, "SMR"
+			data.w _DSIR
+			data.w DSMR
 
-DIER:	DATA.W (DIER+2)
-			JSR DOES	
+DSMR:	DATA.W (DSMR+2)
+			JSR DOES
 			data.w L3375
-			data.b IER
+			data.b SMR
 
-_DMCR		text.7 $c3, "MCR"
-			data.w _DIER
-			data.w DMCR+3
+_DSLCR		text.7 $c4, "SLCR"
+			data.w _DSMR
+			data.w DSLCR
 
-DMCR:	DATA.W (DMCR+2)
-			JSR DOES	
+DSLCR:	DATA.W (DSLCR+2)
+			JSR DOES
 			data.w L3375
-			data.b MCR
+			data.b SLCR
 
-_DSCCR		text.7 $c4, "SCCR"
-			data.w _DMCR
-			data.w DSCCR+3
+_DSSR		text.7 $c3, "SSR"
+			data.w _DSLCR
+			data.w DSSR
 
-DSCCR:	DATA.W (DSCCR+2)
-			JSR DOES	
+DSSR:	DATA.W (DSSR+2)
+			JSR DOES
 			data.w L3375
-			data.b SCCR
+			data.b SSR
 
-_DSCSR		text.7 $c4, "SCSR"
-			data.w _DSCCR
-			data.w DSCSR+3
+_DSFR		text.7 $c3, "SFR"
+			data.w _DSSR
+			data.w DSFR
 
-DSCSR:	DATA.W (DSCSR+2)
-			JSR DOES	
+DSFR:	DATA.W (DSFR+2)
+			JSR DOES
 			data.w L3375
-			data.b SCSR
+			data.b SFR
 
 ;;
-;;    SCDR
+;;    SOB - Serial Out Buffer / SIB - Serial In Buffer
 ;;
-_DSCDR       text.7 $c4, "SCDR"
-    		data.w _DSCSR    ; link to C,CON
-    		data.w DSCDR    ; PFAPTR
+_DSOB        text.7 $c3, "SOB"
+    		data.w _DSFR
+    		data.w DSOB
 ;;
 ;;
 ;;
-DSCDR:	DATA.W (DSCDR+2)
-			JSR DOES	
+DSOB:	DATA.W (DSOB+2)
+			JSR DOES
     		data.w L3375
-    		data.b $17
+    		data.b SOB
 
 ;;
 ;;    MEMTOP
 ;;
 _MEMTOP         text.7 $86, "MEMTOP"
-    			data.w _DSCDR    ; link to SCDR
+    			data.w _DSOB    ; link to SOB
     			data.w MEMTOP    ; PFAPTR
 				data.b $db
 ;;
@@ -3875,16 +3959,10 @@ CASE:	DATA.W (CASE+2)
     						data.w DOES
     						JPI (DCSTOR)
 ;;
-;;    EEC!
-;;
-_EECSTOR        text.7 $84, "EEC!"
-    			data.w _CASE    ; link to CASE:
-    			data.w EECSTORE    ; PFAPTR
-;;
 ;;    BANKC!
 ;;
 _BANKCSTOR      text.7 $86, "BANKC!"
-    			data.w _EECSTOR    ; link to EEC!
+    			data.w _CASE    ; link to CASE
     			data.w BANKCSTOR    ; PFAPTR
 ;;
 ;;    BANKC@
@@ -3893,25 +3971,67 @@ _BANKCAT        text.7 $86, "BANKC@"
     			data.w _BANKCSTOR    ; link to BANKC!
     			data.w BANKCAT    ; PFAPTR
 ;;
-;;    BANKEEC!
+;;    BANKCOPY!
 ;;
-_BANKEECSTOR    text.7 $88, "BANKEEC!"
+_BANKCOPY       text.7 $89, "BANKCOPY!"
     			data.w _BANKCAT    ; link to BANKC@
-    			data.w BANKEECS    ; PFAPTR
+    			data.w BANKCOPY    ; PFAPTR
 ;;
 ;;    BANKEXECUTE
 ;;
 _BANKEXECUTE    text.7 $8b, "BANKEXECUTE"
-    			data.w _BANKEECSTOR    ; link to BANKEEC!
+    			data.w _BANKCOPY    ; link to BANKCOPY!
     			data.w BANKEXEC    ; PFAPTR
 
 	;; PSET is 65C816-only, not available on L28
-	
+
+;;
+;;    SKEY
+;;
+_SKEY           text.7 $84, "SKEY"
+    			data.w _BANKEXECUTE    ; link to BANKEXECUTE
+    			data.w SKEY            ; PFAPTR
+;;
+;;    SEMIT
+;;
+_SEMIT          text.7 $85, "SEMIT"
+    			data.w _SKEY           ; link to SKEY
+    			data.w SEMIT           ; PFAPTR
+;;
+;;    SSTAT
+;;
+_SSTAT          text.7 $85, "SSTAT"
+    			data.w _SEMIT          ; link to SEMIT
+    			data.w SSTAT           ; PFAPTR
+;;
+;;    SCR
+;;
+_SCR            text.7 $83, "SCR"
+    			data.w _SSTAT          ; link to SSTAT
+    			data.w SCR             ; PFAPTR
+;;
+;;    STYPE
+;;
+_STYPE          text.7 $85, "STYPE"
+    			data.w _SCR            ; link to SCR
+    			data.w STYPE           ; PFAPTR
+;;
+;;    SEXPECT
+;;
+_SEXPECT        text.7 $87, "SEXPECT"
+    			data.w _STYPE          ; link to STYPE
+    			data.w SEXPECT         ; PFAPTR
+;;
+;;    SETSERIAL
+;;
+_SETSERIAL      text.7 $89, "SETSERIAL"
+    			data.w _SEXPECT        ; link to SEXPECT
+    			data.w SETSERIAL       ; PFAPTR
 ;;
 ;;    FMTRK
 ;;
 _FMTRK          text.7 $85, "FMTRK"
-    			data.w _BANKEXECUTE    ; link to BANKEXECUTE
+    			data.w _SETSERIAL      ; link to SETSERIAL
     			data.w FMTRK         ; PFAPTR
 ;;
 ;;
@@ -4345,17 +4465,17 @@ DSETUP:	DATA.W (DSETUP+2)
 			JSR DOCON	
     				data.w SETUP
 	
-UNK1:         		data.b $09, $09, $05, $15, $15, $01, $11, $80
+AMODE_TBL:         		data.b $09, $09, $05, $15, $15, $01, $11, $80
 					data.b $09, $80, $0d, $1d, $19, $80, $80, $80
     				data.b $80, $00, $04, $14, $14, $80, $80, $80,
 					data.b $80, $80, $0c, $1c, $1c, $80, $80, $2c
 ;;
 ;;    SETMODE - assembler
 ;;
-SETMODE:         	data.w CAT
-    				data.w MODE
-    				data.w STORE
-    				data.w SEMIS
+SETMODE:         	JPI (CAT)
+    				JPI (MODE)
+    				JPI (STORE)
+    				JPI (SEMIS)
 ;;
 ;;    .A
 ;;
@@ -4372,7 +4492,7 @@ DOTA:	DATA.W (DOTA+2)
 ;; 
 _DHASH:			text.7 $81, "#"
 				data.w _DOTA
-				data.w DHASH+3
+				data.w DHASH
 
 DHASH:	DATA.W (DHASH+2)
 			JSR DOES	
@@ -4384,7 +4504,7 @@ DHASH:	DATA.W (DHASH+2)
 ;; 
 _MEM:			text.7 $83, "MEM"
 				data.w _DHASH
-				data.w MEM+3
+				data.w MEM
 
 MEM:	DATA.W (MEM+2)
 			JSR DOES	
@@ -4396,7 +4516,7 @@ MEM:	DATA.W (MEM+2)
 ;; 
 _COMMAX:		text.7 $82, ",X"
 				data.w _MEM
-				data.w COMMAX+3
+				data.w COMMAX
 
 COMMAX:	DATA.W (COMMAX+2)
 			JSR DOES	
@@ -4408,7 +4528,7 @@ COMMAX:	DATA.W (COMMAX+2)
 ;; 
 _COMMAY			text.7 $82, ",Y"
 				data.w _COMMAX
-				data.w COMMAY+3
+				data.w COMMAY
 
 COMMAY:	DATA.W (COMMAY+2)
 			JSR DOES	
@@ -4416,25 +4536,25 @@ COMMAY:	DATA.W (COMMAY+2)
 				data.b $04
 
 ;;
-;;    X)
-;;	
-_XBRAC:			text.7 $82, "X)"
+;;    I)
+;;
+_IBRAC:			text.7 $82, "I)"
 				data.w _COMMAY
-				data.w XBRAC+3
+				data.w IBRAC
 
-XBRAC:	DATA.W (XBRAC+2)
+IBRAC:	DATA.W (IBRAC+2)
 			JSR DOES	
 				data.w SETMODE
 				data.b $05
 
 ;;
-;;    )Y
-;; 
-_BRACY			text.7 $82, ")Y"
-				data.w _XBRAC
-				data.w BRACY+3
+;;    )X
+;;
+_BRACX			text.7 $82, ")X"
+				data.w _IBRAC
+				data.w BRACX
 
-BRACY:	DATA.W (BRACY+2)
+BRACX:	DATA.W (BRACX+2)
 			JSR DOES	
 				data.w SETMODE
 				data.b $06
@@ -4442,8 +4562,8 @@ BRACY:	DATA.W (BRACY+2)
 ;;    )
 ;; 
 _MRBRAC:		text.7 $81, ")"
-				data.w _BRACY
-				data.w MRBRAC+3
+				data.w _BRACX
+				data.w MRBRAC
 
 MRBRAC:	DATA.W (MRBRAC+2)
 			JSR DOES	
@@ -4455,11 +4575,11 @@ MRBRAC:	DATA.W (MRBRAC+2)
 ;;
 _DTOP:			text.7 $83, "TOP"
 				data.w _MRBRAC
-				data.w DTOP+3
+				data.w DTOP
 
 DTOP:	DATA.W (DTOP+2)
 			PHI
-    			data.w $d9fa 	; ToDo: UNK4
+			JPI (HERE)
     						JPI (ZERO)
     						JPI (SEMIS)
 ;;
@@ -4471,7 +4591,7 @@ _DSEC            text.7 $83, "SEC"
 
 DSEC:	DATA.W (DSEC+2)
 			PHI
-    			data.w $d9fa	; ToDo: UNK4
+			JPI (HERE)
     						JPI (TWO)
     						JPI (SEMIS)
 
@@ -4480,11 +4600,11 @@ DSEC:	DATA.W (DSEC+2)
 ;;
 _RP:         	text.7 $83, "RP)"
                 data.w _DSEC
-                data.w RP+3
+                data.w RP
 
 RP:	DATA.W (RP+2)
 			PHI
-    			data.w $d9fa	; ToDo: UNK4
+			JPI (HERE)
 							JPI (LIT)
     						data.b $00
     						data.w $01
@@ -4493,11 +4613,11 @@ RP:	DATA.W (RP+2)
 ;;
 ;;
 ;;
-UNK9:	DATA.W (UNK9+2)
+CHKMODE:	DATA.W (CHKMODE+2)
 			PHI
     						JPI (ZBRAN)
     						data.b $00
-    						data.w (L_UNK9_1 - addr)
+    						data.w (L_CHKMODE_1 - addr)
     						JPI (MODE)
     						JPI (CAT)
     						JPI (CLIT)
@@ -4506,12 +4626,12 @@ UNK9:	DATA.W (UNK9+2)
     						JPI (ZEQ)
     						JPI (ZBRAN)
     						data.b $00
-    						data.w (L_UNK9_1 - addr)
+    						data.w (L_CHKMODE_1 - addr)
     						JPI (CLIT)
     			data.b $00, $08, $00
     						JPI (MODE)
     						JPI (PSTORE)
-L_UNK9_1	JPI (ONE)
+L_CHKMODE_1	JPI (ONE)
     						JPI (MODE)
     						JPI (CAT)
     						JPI (CLIT)
@@ -4520,15 +4640,15 @@ L_UNK9_1	JPI (ONE)
     						JPI (DDUP)
     						JPI (ZBRAN)
     						data.b $00
-    						data.w (L_UNK9_2 - addr)
+    						data.w (L_CHKMODE_2 - addr)
     						JPI (ZERO)
     						JPI (DO)
-    						JPI (DUP)
+L_CHKMODE_DO	JPI (DUP)
     						JPI (PLUS)
     						JPI (LOOP)
     						data.b $00
-    						data.w NMI
-L_UNK9_2	JPI (OVER)
+    						data.w (L_CHKMODE_DO - addr)
+L_CHKMODE_2	JPI (OVER)
     						JPI (ONEPLUS)
     						JPI (AT)
     						JPI (ANDD)
@@ -4540,6 +4660,7 @@ IMPLIED	JPI (CAT)
                 			JPI (MEM)
     						JPI (SEMIS)
 	
+ASMOP:
     						JPI (DUP)
     						JPI (ONEPLUS)
     						JPI (CAT)
@@ -4548,33 +4669,33 @@ IMPLIED	JPI (CAT)
     						JPI (ANDD)
     						JPI (ZBRAN)
     						data.b $00
-    						data.w (L_UNK9_3 - addr)
+    						data.w (L_CHKMODE_3 - addr)
     						JPI (CLIT)
     			data.b $00, $10, $00
     						JPI (MODE)
     						JPI (PSTORE)
-L_UNK9_3	JPI (OVER)
+L_CHKMODE_3	JPI (OVER)
     						JPI (LIT)
     						data.b $00
     						data.w $ff00
     						JPI (ANDD)
-    						JPI (UNK9)
-    						JPI (UNK9)
+    						JPI (CHKMODE)
+    						JPI (CHKMODE)
     						JPI (ZBRAN)
     						data.b $00
-    						data.w (L_UNK9_4 - addr)
+    						data.w (L_CHKMODE_4 - addr)
     						JPI (MEM)
     						JPI (CR)
     						JPI (LATEST)
     						JPI (ID)
     						JPI (THREE)
     						JPI (ERR)
-L_UNK9_4	JPI (CAT)
+L_CHKMODE_4	JPI (CAT)
     						JPI (MODE)
     						JPI (CAT)
     						JPI (LIT)
     						data.b $00
-    						data.w UNK1
+    						data.w AMODE_TBL
     						JPI (PLUS)
     						JPI (CAT)
     						JPI (PLUS)
@@ -4586,7 +4707,7 @@ L_UNK9_4	JPI (CAT)
     						JPI (ANDD)
     						JPI (ZBRAN)
     						data.b $00
-    						data.w (L_UNK9_5 - addr)
+    						data.w (L_CHKMODE_5 - addr)
     						JPI (MODE)
     						JPI (CAT)
     						JPI (CLIT)
@@ -4597,13 +4718,13 @@ L_UNK9_4	JPI (CAT)
     						JPI (LESS)
     						JPI (ZBRAN)
     						data.b $00
-    						data.w (L_UNK9_6 - addr)
+    						data.w (L_CHKMODE_6 - addr)
     						JPI (CCOMMA)
     						JPI (BRAN)
     						data.b $00
-    						data.w (L_UNK9_5 - addr)
-L_UNK9_6	JPI (COMMA)
-L_UNK9_5	JPI (MEM)
+    						data.w (L_CHKMODE_5 - addr)
+L_CHKMODE_6	JPI (COMMA)
+L_CHKMODE_5	JPI (MEM)
     						JPI (SEMIS)
 ;;
 ;;    BRK,
@@ -4622,7 +4743,7 @@ BRKC:	DATA.W (BRKC+2)
 ;; 	
 _CLCC			text.7 $84, "CLC,"
 				data.w _BRKC	; link to BRK,
-				data.w	CLCC+3 
+				data.w	CLCC 
 
 CLCC:	DATA.W (CLCC+2)
 			JSR DOES	
@@ -4634,7 +4755,7 @@ CLCC:	DATA.W (CLCC+2)
 ;; 
 _CLDC:			text.7 $84, "CLD,"
 				data.w _CLCC					; link to CLCC
-				data.w CLDC+3
+				data.w CLDC
 
 CLDC:	DATA.W (CLDC+2)
 			JSR DOES	
@@ -4646,7 +4767,7 @@ CLDC:	DATA.W (CLDC+2)
 ;; 
 _CLIC:			text.7 $84, "CLI,"
 				data.w _CLDC					; link to CLDC
-				data.w CLIC+3
+				data.w CLIC
 
 CLIC:	DATA.W (CLIC+2)
 			JSR DOES	
@@ -4658,7 +4779,7 @@ CLIC:	DATA.W (CLIC+2)
 ;; 
 _CLVC:			text.7 $84, "CLV,"
 				data.w _CLIC
-				data.w CLVC+3
+				data.w CLVC
 	
 CLVC:	DATA.W (CLVC+2)
 			JSR DOES	
@@ -4670,7 +4791,7 @@ CLVC:	DATA.W (CLVC+2)
 ;; 
 _DEXC:			text.7 $84, "DEX,"
 				data.w _CLVC
-				data.w DEXC+3
+				data.w DEXC
 	
 DEXC:	DATA.W (DEXC+2)
 			JSR DOES	
@@ -4682,7 +4803,7 @@ DEXC:	DATA.W (DEXC+2)
 ;; 
 _DEYC:			text.7 $84, "DEY,"
 				data.w _DEXC
-				data.w DEYC+3
+				data.w DEYC
 	
 DEYC:	DATA.W (DEYC+2)
 			JSR DOES	
@@ -4694,7 +4815,7 @@ DEYC:	DATA.W (DEYC+2)
 ;; 
 _INXC:			text.7 $84, "INX,"
 				data.w _DEYC
-				data.w INXC+3
+				data.w INXC
 
 INXC:	DATA.W (INXC+2)
 			JSR DOES	
@@ -4706,7 +4827,7 @@ INXC:	DATA.W (INXC+2)
 ;; 
 _INYC:			text.7 $84, "INY,"
 				data.w _INXC
-				data.w INYC+3
+				data.w INYC
 
 INYC:	DATA.W (INYC+2)
 			JSR DOES	
@@ -4718,7 +4839,7 @@ INYC:	DATA.W (INYC+2)
 ;;  
 _NOPC:			text.7 $84, "NOP,"
 				data.w _INYC
-				data.w NOPC+3
+				data.w NOPC
 
 NOPC:	DATA.W (NOPC+2)
 			JSR DOES	
@@ -4730,7 +4851,7 @@ NOPC:	DATA.W (NOPC+2)
 ;; 
 _PHAC:			text.7 $84, "PHA,"
 				data.w _NOPC
-				data.w PHAC+3
+				data.w PHAC
 
 PHAC:	DATA.W (PHAC+2)
 			JSR DOES	
@@ -4741,7 +4862,7 @@ PHAC:	DATA.W (PHAC+2)
 ;;
 _PHPC:			text.7 $84, "PHP,"
 				data.w _PHAC
-				data.w PHPC+3
+				data.w PHPC
 
 PHPC:	DATA.W (PHPC+2)
 			JSR DOES	
@@ -4753,7 +4874,7 @@ PHPC:	DATA.W (PHPC+2)
 ;;
 _PLAC:			text.7 $84, "PLA,"
 				data.w _PHPC
-				data.w PLAC+3
+				data.w PLAC
 
 PLAC:	DATA.W (PLAC+2)
 			JSR DOES	
@@ -4765,7 +4886,7 @@ PLAC:	DATA.W (PLAC+2)
 ;;
 _PLPC:			text.7 $84, "PLP,"
 				data.w _PLAC
-				data.w PLPC+3
+				data.w PLPC
 
 PLPC:	DATA.W (PLPC+2)
 			JSR DOES	
@@ -4776,7 +4897,7 @@ PLPC:	DATA.W (PLPC+2)
 ;;
 _RTIC:			text.7 $84, "RTI,"
 				data.w _PLPC
-				data.w RTIC+3
+				data.w RTIC
 
 RTIC:	DATA.W (RTIC+2)
 			JSR DOES	
@@ -4787,7 +4908,7 @@ RTIC:	DATA.W (RTIC+2)
 ;; 
 _RTSC:			text.7 $84, "RTS,"
 				data.w _RTIC
-				data.w RTSC+3
+				data.w RTSC
 
 RTSC:	DATA.W (RTSC+2)
 			JSR DOES	
@@ -4798,7 +4919,7 @@ RTSC:	DATA.W (RTSC+2)
 ;;
 _SECC:			text.7 $84, "SEC,"
 				data.w _RTSC
-				data.w SECC+3
+				data.w SECC
 
 SECC:	DATA.W (SECC+2)
 			JSR DOES	
@@ -4809,7 +4930,7 @@ SECC:	DATA.W (SECC+2)
 ;;
 _SEDC:			text.7 $84, "SED,"
 				data.w _SECC
-				data.w SEDC+3
+				data.w SEDC
 
 SEDC:	DATA.W (SEDC+2)
 			JSR DOES	
@@ -4820,7 +4941,7 @@ SEDC:	DATA.W (SEDC+2)
 ;;
 _SEIC:			text.7 $84, "SEI,"
 				data.w _SEDC
-				data.w SEIC+3
+				data.w SEIC
 
 SEIC:	DATA.W (SEIC+2)
 			JSR DOES	
@@ -4831,7 +4952,7 @@ SEIC:	DATA.W (SEIC+2)
 ;;
 _TAXC:			text.7 $84, "TAX,"
 				data.w _SEIC
-				data.w TAXC+3
+				data.w TAXC
 
 TAXC:	DATA.W (TAXC+2)
 			JSR DOES	
@@ -4842,7 +4963,7 @@ TAXC:	DATA.W (TAXC+2)
 ;;
 _TAYC:			text.7 $84, "TAY,"
 				data.w _TAXC
-				data.w TAYC+3
+				data.w TAYC
 
 TAYC:	DATA.W (TAYC+2)
 			JSR DOES	
@@ -4853,7 +4974,7 @@ TAYC:	DATA.W (TAYC+2)
 ;;
 _TSXC:			text.7 $84, "TSX,"
 				data.w _TAYC
-				data.w TSXC+3
+				data.w TSXC
 
 TSXC:	DATA.W (TSXC+2)
 			JSR DOES	
@@ -4864,7 +4985,7 @@ TSXC:	DATA.W (TSXC+2)
 ;;
 _TXAC:			text.7 $84, "TXA,"
 				data.w _TSXC
-				data.w TXAC+3
+				data.w TXAC
 
 TXAC:	DATA.W (TXAC+2)
 			JSR DOES	
@@ -4875,7 +4996,7 @@ TXAC:	DATA.W (TXAC+2)
 ;;
 _TYAC:			text.7 $84, "TYA,"
 				data.w _TXAC
-				data.w TYAC+3
+				data.w TYAC
 
 TYAC:	DATA.W (TYAC+2)
 			JSR DOES	
@@ -4886,22 +5007,446 @@ TYAC:	DATA.W (TYAC+2)
 ;;
 _TXSC:			text.7 $84, "TXS,"
 				data.w _TYAC
-				data.w TXSC+3
+				data.w TXSC
 
 TXSC:	DATA.W (TXSC+2)
 			JSR DOES	
 				data.w IMPLIED
 				data.b $9a
 ;;
+;;
+;;    ASR,
+;;
+_ASRC			text.7 $84, "ASR,"
+			data.w _TXSC
+			data.w ASRC
+
+ASRC:	DATA.W (ASRC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $3a
+
+;;
+;;    CLW,
+;;
+_CLWC			text.7 $84, "CLW,"
+			data.w _ASRC
+			data.w CLWC
+
+CLWC:	DATA.W (CLWC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $51
+
+;;
+;;    EXC,
+;;
+_EXCC			text.7 $84, "EXC,"
+			data.w _CLWC
+			data.w EXCC
+
+EXCC:	DATA.W (EXCC+2)
+			PHI
+						JPI (CLIT)
+			data.b $00, $d4, $00
+						JPI (CCOMMA)
+						JPI (CCOMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+
+;;
+;;    INI,
+;;
+_INIC			text.7 $84, "INI,"
+			data.w _EXCC
+			data.w INIC
+
+INIC:	DATA.W (INIC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $bb
+
+;;
+;;    JSB0,
+;;
+_JSB0C			text.7 $85, "JSB0,"
+			data.w _INIC
+			data.w JSB0C
+
+JSB0C:	DATA.W (JSB0C+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $0b
+
+;;
+;;    JSB1,
+;;
+_JSB1C			text.7 $85, "JSB1,"
+			data.w _JSB0C
+			data.w JSB1C
+
+JSB1C:	DATA.W (JSB1C+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $1b
+
+;;
+;;    JSB2,
+;;
+_JSB2C			text.7 $85, "JSB2,"
+			data.w _JSB1C
+			data.w JSB2C
+
+JSB2C:	DATA.W (JSB2C+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $2b
+
+;;
+;;    JSB3,
+;;
+_JSB3C			text.7 $85, "JSB3,"
+			data.w _JSB2C
+			data.w JSB3C
+
+JSB3C:	DATA.W (JSB3C+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $3b
+
+;;
+;;    JSB4,
+;;
+_JSB4C			text.7 $85, "JSB4,"
+			data.w _JSB3C
+			data.w JSB4C
+
+JSB4C:	DATA.W (JSB4C+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $4b
+
+;;
+;;    JSB5,
+;;
+_JSB5C			text.7 $85, "JSB5,"
+			data.w _JSB4C
+			data.w JSB5C
+
+JSB5C:	DATA.W (JSB5C+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $5b
+
+;;
+;;    JSB6,
+;;
+_JSB6C			text.7 $85, "JSB6,"
+			data.w _JSB5C
+			data.w JSB6C
+
+JSB6C:	DATA.W (JSB6C+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $6b
+
+;;
+;;    JSB7,
+;;
+_JSB7C			text.7 $85, "JSB7,"
+			data.w _JSB6C
+			data.w JSB7C
+
+JSB7C:	DATA.W (JSB7C+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $7b
+
+;;
+;;    LAB,
+;;
+_LABC			text.7 $84, "LAB,"
+			data.w _JSB7C
+			data.w LABC
+
+LABC:	DATA.W (LABC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $13
+
+;;
+;;    LAI,
+;;
+_LAIC			text.7 $84, "LAI,"
+			data.w _LABC
+			data.w LAIC
+
+LAIC:	DATA.W (LAIC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $eb
+
+;;
+;;    LAN,
+;;
+_LANC			text.7 $84, "LAN,"
+			data.w _LAIC
+			data.w LANC
+
+LANC:	DATA.W (LANC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $ab
+
+;;
+;;    LII,
+;;
+_LIIC			text.7 $84, "LII,"
+			data.w _LANC
+			data.w LIIC
+
+LIIC:	DATA.W (LIIC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $9b
+
+;;
+;;    MPA,
+;;
+_MPAC			text.7 $84, "MPA,"
+			data.w _LIIC
+			data.w MPAC
+
+MPAC:	DATA.W (MPAC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $12
+
+;;
+;;    MPY,
+;;
+_MPYC			text.7 $84, "MPY,"
+			data.w _MPAC
+			data.w MPYC
+
+MPYC:	DATA.W (MPYC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $02
+
+;;
+;;    NEG,
+;;
+_NEGC			text.7 $84, "NEG,"
+			data.w _MPYC
+			data.w NEGC
+
+NEGC:	DATA.W (NEGC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $1a
+
+;;
+;;    NXT,
+;;
+_NXTC			text.7 $84, "NXT,"
+			data.w _NEGC
+			data.w NXTC
+
+NXTC:	DATA.W (NXTC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $8b
+
+;;
+;;    PHI,
+;;
+_PHIC			text.7 $84, "PHI,"
+			data.w _NXTC
+			data.w PHIC
+
+PHIC:	DATA.W (PHIC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $cb
+
+;;
+;;    PHW,
+;;
+_PHWC			text.7 $84, "PHW,"
+			data.w _PHIC
+			data.w PHWC
+
+PHWC:	DATA.W (PHWC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $23
+
+;;
+;;    PHX,
+;;
+_PHXC			text.7 $84, "PHX,"
+			data.w _PHWC
+			data.w PHXC
+
+PHXC:	DATA.W (PHXC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $da
+
+;;
+;;    PHY,
+;;
+_PHYC			text.7 $84, "PHY,"
+			data.w _PHXC
+			data.w PHYC
+
+PHYC:	DATA.W (PHYC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $5a
+
+;;
+;;    PIA,
+;;
+_PIAC			text.7 $84, "PIA,"
+			data.w _PHYC
+			data.w PIAC
+
+PIAC:	DATA.W (PIAC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $fb
+
+;;
+;;    PLI,
+;;
+_PLIC			text.7 $84, "PLI,"
+			data.w _PIAC
+			data.w PLIC
+
+PLIC:	DATA.W (PLIC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $db
+
+;;
+;;    PLW,
+;;
+_PLWC			text.7 $84, "PLW,"
+			data.w _PLIC
+			data.w PLWC
+
+PLWC:	DATA.W (PLWC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $33
+
+;;
+;;    PLX,
+;;
+_PLXC			text.7 $84, "PLX,"
+			data.w _PLWC
+			data.w PLXC
+
+PLXC:	DATA.W (PLXC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $fa
+
+;;
+;;    PLY,
+;;
+_PLYC			text.7 $84, "PLY,"
+			data.w _PLXC
+			data.w PLYC
+
+PLYC:	DATA.W (PLYC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $7a
+
+;;
+;;    PSH,
+;;
+_PSHC			text.7 $84, "PSH,"
+			data.w _PLYC
+			data.w PSHC
+
+PSHC:	DATA.W (PSHC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $22
+
+;;
+;;    PUL,
+;;
+_PULC			text.7 $84, "PUL,"
+			data.w _PSHC
+			data.w PULC
+
+PULC:	DATA.W (PULC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $32
+
+;;
+;;    RND,
+;;
+_RNDC			text.7 $84, "RND,"
+			data.w _PULC
+			data.w RNDC
+
+RNDC:	DATA.W (RNDC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $42
+
+;;
+;;    TAW,
+;;
+_TAWC			text.7 $84, "TAW,"
+			data.w _RNDC
+			data.w TAWC
+
+TAWC:	DATA.W (TAWC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $62
+
+;;
+;;    TIP,
+;;
+_TIPC			text.7 $84, "TIP,"
+			data.w _TAWC
+			data.w TIPC
+
+TIPC:	DATA.W (TIPC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $03
+
+;;
+;;    TWA,
+;;
+_TWAC			text.7 $84, "TWA,"
+			data.w _TIPC
+			data.w TWAC
+
+TWAC:	DATA.W (TWAC+2)
+			JSR DOES
+				data.w IMPLIED
+				data.b $72
+
 ;;    ADC,
 ;;
 _ADCC:		text.7 $84, "ADC,"
-			data.w _TXSC
-			data.w ADCC+3
+			data.w _TWAC
+			data.w ADCC
 
 ADCC:	DATA.W (ADCC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $60, $6e, $1c
 
 ;;
@@ -4909,11 +5454,11 @@ ADCC:	DATA.W (ADCC+2)
 ;;
 _ANDC:		text.7 $84, "AND,"
 			data.w _ADCC
-			data.w ANDC+3
+			data.w ANDC
 
 ANDC:	DATA.W (ANDC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $20, $6e, $1c
 
 ;;
@@ -4921,11 +5466,11 @@ ANDC:	DATA.W (ANDC+2)
 ;;
 _CMPC:		text.7 $84, "CMP,"
 			data.w _ANDC
-			data.w CMPC+3
+			data.w CMPC
 
 CMPC:	DATA.W (CMPC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $c0, $6e, $1c
 
 	;;
@@ -4933,11 +5478,11 @@ CMPC:	DATA.W (CMPC+2)
 	;;
 _EORC:		text.7 $84, "EOR,"
 			data.w _CMPC
-			data.w EORC+3
+			data.w EORC
 
 EORC:	DATA.W (EORC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $40, $6e, $1c
 
 	;;
@@ -4945,11 +5490,11 @@ EORC:	DATA.W (EORC+2)
 	;;
 _LDAC:		text.7 $84, "LDA,"
 			data.w _EORC
-			data.w LDAC+3
+			data.w LDAC
 
 LDAC:	DATA.W (LDAC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $a0, $6e, $1c
 
 	;;
@@ -4957,11 +5502,11 @@ LDAC:	DATA.W (LDAC+2)
 	;;
 _ORAC:		text.7 $84, "ORA,"
 			data.w _LDAC
-			data.w ORAC+3
+			data.w ORAC
 
 ORAC:	DATA.W (ORAC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $00, $6e, $1c
 
 	;;
@@ -4969,11 +5514,11 @@ ORAC:	DATA.W (ORAC+2)
 	;;
 _SBCC:		text.7 $84, "SBC,"
 			data.w _ORAC
-			data.w SBCC+3
+			data.w SBCC
 
 SBCC:	DATA.W (SBCC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $e0, $6e, $1c
 
 	;;
@@ -4981,11 +5526,11 @@ SBCC:	DATA.W (SBCC+2)
 	;;
 _STAC:		text.7 $84, "STA,"
 			data.w _SBCC
-			data.w STAC+3
+			data.w STAC
 
 STAC:	DATA.W (STAC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $80, $6c, $1c
 
 	;;
@@ -4993,11 +5538,11 @@ STAC:	DATA.W (STAC+2)
 	;;
 _ASLC:		text.7 $84, "ASL,"
 			data.w _STAC
-			data.w ASLC+3
+			data.w ASLC
 
 ASLC:	DATA.W (ASLC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $01, $0d, $0d
 
 	;;
@@ -5005,11 +5550,11 @@ ASLC:	DATA.W (ASLC+2)
 	;;
 _DECC:		text.7 $84, "DEC,"
 			data.w _ASLC
-			data.w DECC+3
+			data.w DECC
 
 DECC:	DATA.W (DECC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $c1, $0c, $0c
 
 	;;
@@ -5017,11 +5562,11 @@ DECC:	DATA.W (DECC+2)
 	;;
 _INCC:		text.7 $84, "INC,"
 			data.w _DECC
-			data.w INCC+3
+			data.w INCC
 
 INCC:	DATA.W (INCC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $e1, $0c, $0c
 
 	;;
@@ -5029,11 +5574,11 @@ INCC:	DATA.W (INCC+2)
 	;;
 _LSRC:		text.7 $84, "LSR,"
 			data.w _INCC
-			data.w LSRC+3
+			data.w LSRC
 
 LSRC:	DATA.W (LSRC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $41, $0d, $0d
 
 	;;
@@ -5041,11 +5586,11 @@ LSRC:	DATA.W (LSRC+2)
 	;;
 _ROLC:		text.7 $84, "ROL,"
 			data.w _LSRC
-			data.w ROLC+3
+			data.w ROLC
 
 ROLC:	DATA.W (ROLC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $21, $0d, $0d
 
 	;;
@@ -5053,11 +5598,11 @@ ROLC:	DATA.W (ROLC+2)
 	;;
 _RORC:		text.7 $84, "ROR,"
 			data.w _ROLC
-			data.w RORC+3
+			data.w RORC
 
 RORC:	DATA.W (RORC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $61, $0d, $0d
 
 	;;
@@ -5065,11 +5610,11 @@ RORC:	DATA.W (RORC+2)
 	;;
 _STXC:		text.7 $84, "STX,"
 			data.w _RORC
-			data.w STXC+3
+			data.w STXC
 
 STXC:	DATA.W (STXC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $81, $14, $04
 
 	;;
@@ -5077,11 +5622,11 @@ STXC:	DATA.W (STXC+2)
 	;;
 _CPXC:		text.7 $84, "CPX,"
 			data.w _STXC
-			data.w CPXC+3
+			data.w CPXC
 
 CPXC:	DATA.W (CPXC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $e0, $86, $04
 
 	;;
@@ -5089,11 +5634,11 @@ CPXC:	DATA.W (CPXC+2)
 	;;
 _CPYC:		text.7 $84, "CPY,"
 			data.w _CPXC
-			data.w CPYC+3
+			data.w CPYC
 
 CPYC:	DATA.W (CPYC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $c0, $86, $04
 
 	;;
@@ -5101,11 +5646,11 @@ CPYC:	DATA.W (CPYC+2)
 	;;
 _LDXC:		text.7 $84, "LDX,"
 			data.w _CPYC
-			data.w LDXC+3
+			data.w LDXC
 
 LDXC:	DATA.W (LDXC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $a2, $96, $14
 
 	;;
@@ -5113,11 +5658,11 @@ LDXC:	DATA.W (LDXC+2)
 	;;
 _LDYC:		text.7 $84, "LDY,"
 			data.w _LDXC
-			data.w LDYC+3
+			data.w LDYC
 
 LDYC:	DATA.W (LDYC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $a0, $8e, $0c
 
 	;;
@@ -5125,11 +5670,11 @@ LDYC:	DATA.W (LDYC+2)
 	;;
 _STYC:		text.7 $84, "STY,"
 			data.w _LDYC
-			data.w STYC+3
+			data.w STYC
 
 STYC:	DATA.W (STYC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $80, $8c, $04
 
 	;;
@@ -5137,11 +5682,11 @@ STYC:	DATA.W (STYC+2)
 	;;
 _JSRC:		text.7 $84, "JSR,"
 			data.w _STYC
-			data.w JSRC+3
+			data.w JSRC
 
 JSRC:	DATA.W (JSRC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $14, $80, $04
 
 	;;
@@ -5149,11 +5694,11 @@ JSRC:	DATA.W (JSRC+2)
 	;;
 _JMPC:		text.7 $84, "JMP,"
 			data.w _JSRC
-			data.w JMPC+3
+			data.w JMPC
 
 JMPC:	DATA.W (JMPC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $40, $80, $84
 
 	;;
@@ -5161,11 +5706,11 @@ JMPC:	DATA.W (JMPC+2)
 	;; 
 _BITC:		text.7 $84, "BIT,"
 			data.w _JMPC
-			data.w BITC+3
+			data.w BITC
 
 BITC:	DATA.W (BITC+2)
 			JSR DOES	
-			data.w $daad
+			data.w ASMOP
 			data.b $20, $84, $04
 
 ;;
@@ -5273,9 +5818,178 @@ BITCLR:	DATA.W (BITCLR+2)
     						data.b $00
     						data.w (L_BITSET_1 - addr)
 
+;;
+;;    ADD,
+;;
+_ADDC_			text.7 $84, "ADD,"
+			data.w _BITCLR
+			data.w ADDC_    ; PFAPTR
+
+ADDC_:	DATA.W (ADDC_+2)
+			PHI
+						JPI (MODE)
+						JPI (CAT)
+						JPI (DUP)
+						JPI (ONE)
+						JPI (EQUAL)
+						JPI (ZBRAN)
+						data.b $00
+						data.w (.ADD_2 - addr)
+						JPI (DROP)
+						JPI (CLIT)
+			data.b $00, $89, $00
+						JPI (CCOMMA)
+						JPI (CCOMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+.ADD_2		JPI (DUP)
+						JPI (TWO)
+						JPI (EQUAL)
+						JPI (ZBRAN)
+						data.b $00
+						data.w (.ADD_3 - addr)
+						JPI (DROP)
+						JPI (CLIT)
+			data.b $00, $64, $00
+						JPI (CCOMMA)
+						JPI (CCOMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+.ADD_3		JPI (THREE)
+						JPI (EQUAL)
+						JPI (ZBRAN)
+						data.b $00
+						data.w (.ADD_ERR - addr)
+						JPI (CLIT)
+			data.b $00, $74, $00
+						JPI (CCOMMA)
+						JPI (CCOMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+.ADD_ERR	JPI (THREE)
+						JPI (ERR)
+
+;;
+;;    STI,
+;;
+_STIC			text.7 $84, "STI,"
+			data.w _ADDC_
+			data.w STIC    ; PFAPTR
+
+STIC:	DATA.W (STIC+2)
+			PHI
+						JPI (CLIT)
+			data.b $00, $b2, $00
+						JPI (CCOMMA)
+						JPI (SWAP)
+						JPI (CCOMMA)
+						JPI (CCOMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+
+;;
+;;    JMPX,
+;;
+_JMPXC			text.7 $85, "JMPX,"
+			data.w _STIC
+			data.w JMPXC    ; PFAPTR
+
+JMPXC:	DATA.W (JMPXC+2)
+			PHI
+						JPI (CLIT)
+			data.b $00, $7c, $00
+						JPI (CCOMMA)
+						JPI (COMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+
+;;
+;;    RBA,
+;;
+_RBAC			text.7 $84, "RBA,"
+			data.w _JMPXC
+			data.w RBAC    ; PFAPTR
+
+RBAC:	DATA.W (RBAC+2)
+			PHI
+						JPI (CLIT)
+			data.b $00, $c2, $00
+						JPI (CCOMMA)
+						JPI (SWAP)
+						JPI (COMMA)
+						JPI (CCOMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+
+;;
+;;    SBA,
+;;
+_SBAC			text.7 $84, "SBA,"
+			data.w _RBAC
+			data.w SBAC    ; PFAPTR
+
+SBAC:	DATA.W (SBAC+2)
+			PHI
+						JPI (CLIT)
+			data.b $00, $d2, $00
+						JPI (CCOMMA)
+						JPI (SWAP)
+						JPI (COMMA)
+						JPI (CCOMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+
+;;
+;;    BAR,
+;;
+_BARC			text.7 $84, "BAR,"
+			data.w _SBAC
+			data.w BARC    ; PFAPTR
+
+BARC:	DATA.W (BARC+2)
+			PHI
+						JPI (CLIT)
+			data.b $00, $e2, $00
+						JPI (CCOMMA)
+						JPI (ROT)
+						JPI (ROT)
+						JPI (ROT)
+						JPI (SWAP)
+						JPI (ROT)
+						JPI (COMMA)
+						JPI (SWAP)
+						JPI (CCOMMA)
+						JPI (CCOMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+
+;;
+;;    BAS,
+;;
+_BASC			text.7 $84, "BAS,"
+			data.w _BARC
+			data.w BASC    ; PFAPTR
+
+BASC:	DATA.W (BASC+2)
+			PHI
+						JPI (CLIT)
+			data.b $00, $f2, $00
+						JPI (CCOMMA)
+						JPI (ROT)
+						JPI (ROT)
+						JPI (ROT)
+						JPI (SWAP)
+						JPI (ROT)
+						JPI (COMMA)
+						JPI (SWAP)
+						JPI (CCOMMA)
+						JPI (CCOMMA)
+						JPI (MEM)
+						JPI (SEMIS)
+
 _BEGINC:		text.7 $86,"BEGIN,"
-				data.w _BITCLR
-				data.w BEGINC+3
+				data.w _BASC
+				data.w BEGINC
 
 BEGINC:	DATA.W (BEGINC+2)
 			PHI
@@ -5515,6 +6229,39 @@ _TASK           text.7 $84, "TASK"
 TASK:	DATA.W (TASK+2)
 			PHI
     						JPI (SEMIS)
+
+;;
+;;    MOVETO
+;;
+_MOVETO         text.7 $86, "MOVETO"
+    			data.w _TASK    ; link to TASK
+    			data.w MOVETO    ; PFAPTR
+;;
+;;    LINETO
+;;
+_LINETO         text.7 $86, "LINETO"
+    			data.w _MOVETO    ; link to MOVETO
+    			data.w LINETO    ; PFAPTR
+;;
+;;    PIXEL ( x y c -- ) — set or clear a single LCD pixel
+;;      x=0-239, y=0-63, c=0 clear / c=1 set
+;;
+_PIXEL          text.7 $85, "PIXEL"
+    			data.w _LINETO    ; link to LINETO
+    			data.w PIXEL      ; PFAPTR
+;;
+;;    FILLRECT ( x y w h c -- ) — fill an LCD rectangle
+;;      x=0-239, y=0-159, w=width, h=height, c=0 clear / c=1 set
+;;
+_FILLRECT       text.7 $88, "FILLRECT"
+    			data.w _PIXEL     ; link to PIXEL
+    			data.w GFXFILL    ; PFAPTR
+;;
+;;    CONTRAST ( n -- ) — set LCD contrast
+;;
+_CONTRAST       text.7 $88, "CONTRAST"
+    			data.w _FILLRECT  ; link to FILLRECT
+    			data.w CONTRAST   ; PFAPTR
 
 PADDINGD:       data.b $ff, $ff
                 data.b $ff

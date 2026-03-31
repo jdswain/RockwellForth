@@ -56,6 +56,10 @@
 	cpu := "RC19"			; L28 uses same instruction set identifier
 	machine := "L2800"
 
+	;; Console mode: 1 = keyboard matrix input, 0 = serial terminal input
+	;; Change to 1 for console mode build.
+	CONSOLE_MODE := 1
+
 	message "Assembling Forth Kernel for L28 MCU"
 
 
@@ -144,15 +148,6 @@
 	SODL := $003e				; SOUT Divider Latch (write-only)
 	SIDL := $003f				; SIN Divider Latch (write-only)
 
-	;; 6551 ACIA (L28 I/O at $0000-$003F)
-	ACIA_DATA := $0000			; Data register (read/write)
-	ACIA_STATUS := $0001		; Status register (read)
-	ACIA_CMD := $0002			; Command register (write)
-	ACIA_CTL := $0003			; Control register (write)
-	;; Status register bits:
-	;;   Bit 4: TDRE — Transmitter Data Register Empty (1=ready)
-	;;   Bit 3: RDRF — Receiver Data Register Full (1=data available)
-
 	;; Zero page RAM usage
 	;; Note: XSAVE is no longer needed (X is free).
 	;; Note: W-1 JMP trick is no longer needed (NXT does direct threading).
@@ -170,8 +165,26 @@
     	INTVEC := N+8
 		TOS := INTVEC+2			; Top of data stack, in zero page.
 
+	;; Keyboard ring buffer variables (zero page)
+	KBUF_HEAD := $005A		; ring buffer write index
+	KBUF_TAIL := $005B		; ring buffer read index
+
+	;; LCD cursor state (zero page for fast access)
+	LCD_COL := $005C		; current text column (0-39)
+	LCD_ROW := $005D		; current text row (0-19)
+	LCD_TOPPAGE := $005E		; UC1608 page number for top visible row (0-19)
+	LCD_INITED := $005F		; nonzero if LCD already initialized
+
+	;; Graphics cursor (zero page)
+	GFX_X := $0060			; pixel X position (0-239)
+	GFX_Y := $0061			; pixel Y position (0-159)
+
 	;; Data stack is in page 2, indexed by Y
 	stack := $0200
+
+	;; Keyboard ring buffer in RAM (page 4)
+	KBUF := $0480			; 16-byte ring buffer
+	KBUF_MASK := $0F		; mask for 16-entry buffer
 
 	;; Page 1 RAM usage - hardware return stack (unchanged)
 
@@ -201,7 +214,7 @@
 (*
 	Disk controller registers.
 *)
-		DSK_BASE := $0800
+		DSK_BASE := $0640
     		DSK_STATUS := DSK_BASE
     		DSK_TRACK := DSK_BASE + 1
     		DSK_SECTOR := DSK_BASE + 2
@@ -255,15 +268,23 @@
 	CRC_H := $05ff				; CRC High (read) / CRC Init (write)
 
 (*
-	This is a 4k ROM starting at $F400, but the first $400 bytes are not used
+	ST7586S LCD controller registers (8080-style parallel interface)
+	A0 selects command/data: $0600 = command/status, $0601 = data
+*)
+	LCD_CMD := $0600			; Write: command byte, Read: status byte
+	LCD_DATA := $0601			; Write: data to display RAM, Read: data from RAM
+	COL_OFFSET = 4				; byte column offset for ST7586S panel (8 pixels / 2)
+
+(*
+	This is an 8k ROM starting at $E000.
 *)
 
-    		ORG := $f000
+    		ORG := $e000
 
 
 ;; Data table of initial values for registers, used by INIT
 ;; Offsets: TIBX(0) RO(2) SO(4) UC_L(6) UPAD(8) UR_W(10) BASE(12)
-INITTAB:    DATA.W $0380, $00c2, $00ff, $0050
+INITTAB:    DATA.W $0380, $02c2, $00ff, $0050
 			DATA.W $037e, DISK, $000a
 ;;
 ;;    LIT — push next inline 16-bit value from thread to data stack
@@ -607,11 +628,11 @@ L504   		JSR L506
     		JMP POP
 L506   		JMP (UEMIT)
 XEMIT  		PHA
-.TXWAIT		LDA ACIA_STATUS		; check 6551 status
-    		AND #$10			; bit 4 = TDRE
+.TXWAIT		LDA SSR				; check L28 serial status
+    		AND #$20			; bit 5 = BE (buffer empty)
     		BEQ .TXWAIT			; loop until TX ready
     		PLA
-    		STA ACIA_DATA		; write character
+    		STA SOB				; write character
     		RTS
 ;;
 ;;    KEY
@@ -620,18 +641,23 @@ KEY:	DATA.W (KEY+2)
 		JSR L517	
     		JMP PUSH0A
 L517   		JMP (UKEY)
-L518   		LDA ACIA_STATUS		; check 6551 status
-    		AND #$08			; bit 3 = RDRF
+L518   		LDA SSR				; check L28 serial status
+    		AND #$01			; bit 0 = BF (buffer full)
     		BEQ L518			; loop until RX data available
-    		LDA ACIA_DATA		; read character
+    		LDA SIB				; read character
     		RTS
 ;;
 ;;    ?TERMINAL
 ;;
 QTERM:	DATA.W (QTERM+2)
-		LDA ACIA_STATUS	
-    		AND #$08			; bit 3 = RDRF
+		LDA KBUF_HEAD
+		CMP KBUF_TAIL
+		BNE .QT_HAS
+		LDA SSR
+    		AND #$01			; bit 0 = BF
     		JMP PUSH0A
+.QT_HAS:	LDA #$01
+		JMP PUSH0A
 ;;
 ;;    CR
 ;;
@@ -810,6 +836,9 @@ XOR:	DATA.W (XOR+2)
 ;;
 SPAT:	DATA.W (SPAT+2)
 		TYA	; Y is data stack pointer (was TXA)
+    		PHA
+    		LDA #>stack	; high byte = $02
+    		JMP PUSH
 ;
 PUSH0A: 	PHA
     		LDA #0
@@ -1447,12 +1476,12 @@ ROT:	DATA.W (ROT+2)
 ;;
 PICK:	DATA.W (PICK+2)
 		PHI
-    		JPI (DUP)
-    		JPI (PLUS)
-    		JPI (SPAT)
-    		JPI (PLUS)
-    		JPI (AT)
-    		JPI (SEMIS)
+		JPI (DUP)
+		JPI (PLUS)
+		JPI (SPAT)
+		JPI (PLUS)
+		JPI (AT)
+		JPI (SEMIS)
 ;;
 ;;    SPACE
 ;;
@@ -1767,16 +1796,54 @@ RESET:		LDX #$ff
     		CLD
     		CLC
     		STI #0, INTFLAG
-    		;; Initialize 6551 ACIA
-    		LDA ACIA_STATUS		; soft reset (read status clears)
-    		STI #$0B, ACIA_CMD		; command: no parity, RTS low, TX enabled,
-    						;          DTR low, RX IRQ disabled
-    		STI #$1E, ACIA_CTL		; control: 8 data bits, 1 stop bit, 9600 baud
+    		;; Initialize Timer B for baud rate generation
+    		;; 115200 bps at 8 MHz: UIB = ø2/[(n+1)(l+1)]
+    		;; n=2 (TIMB), l=22 (SIDL/SODL): 8000000/(3*23) = 115942 Hz (0.64% error)
+    		STI #$00, TBM			; interval timer, no prescale, no interrupts
+    		STI #$02, TBLL			; Timer B lower latch = $02
+    		STI #$00, TBUL			; Timer B upper latch = $00 (loads counter)
+
+    		;; Initialize L28 USART
+    		STI #$E0, SMR			; enable TXD (6), RXD (7), Timer B timing (5)
+    		STI #$03, SLCR			; 8 data bits, 1 stop bit, no parity
+    		STI #$00, SFR			; normal operation
+    		STI #$16, SIDL			; TXD baud rate divider = 22 decimal
+    		STI #$16, SODL			; RXD baud rate divider = 22 decimal
 
     		STI #<XEMIT, UEMIT
     		STI #>XEMIT, UEMIT+1
-    		STI #<XKEY, UKEY
-    		STI #>XKEY, UKEY+1
+
+    		;; Initialize keyboard ring buffer (always, cheap)
+    		STI #0, KBUF_HEAD
+    		STI #0, KBUF_TAIL
+
+		if CONSOLE_MODE {
+    		    ;; Console mode: keyboard input
+    		    STI #<CONKEY, UKEY
+    		    STI #>CONKEY, UKEY+1
+
+    		    ;; Configure keyboard hardware
+    		    STI #$00, PortC_Dir		; Port C all inputs (column read)
+    		    STI #$00, PortD			; Port D all low (no row driven)
+    		    ;; Enable PA0 edge detect → IRQ0
+    		    LDA EIR
+    		    ORA #$01			; bit 0 = PA0 edge detect enable
+    		    STA EIR
+    		    ;; Clear any pending PA0 flag
+    		    LDA CIR
+    		    AND #$BF			; clear bit 6 (PA0 edge flag)
+    		    STA CIR
+
+    		    ;; Initialize LCD and redirect output
+    		    JSR LCD_INIT
+    		    STI #<LCD_XEMIT, UEMIT
+    		    STI #>LCD_XEMIT, UEMIT+1
+		} else {
+    		    ;; Terminal mode: serial input (default)
+    		    STI #<L518, UKEY
+    		    STI #>L518, UKEY+1
+		}
+
     		STI #0, UP
     		STI #3, UP+1
     		LDX #5
@@ -1797,6 +1864,13 @@ L1505		LDA #<COLD
     		STA INTVEC+1
     		LDX #$0d
     		JSR L1549
+	; Initialize KHZ user variable to 8000 ($1F40) for 8 MHz clock
+		LDX #$52
+		LDA #$40
+		STA (UP),X		; KHZ low byte
+		INX
+		LDA #$1F
+		STA (UP),X		; KHZ high byte
 L1515  		;; Set up I register as IP pointing to DSKBOOT
 			LDA #>DSKBOOT
 			PHA
@@ -2404,63 +2478,154 @@ Q:	DATA.W (Q+2)
     		JPI (AT)
     		JPI (DOT)
     		JPI (SEMIS)
+;;    BANKCOPY! - copy 8K bank between ICs
+;;    ( src_ic src_bank dst_ic dst_bank -- )
+;;    IC: 0=ES0(RAM) 2=ES2(flash) 3=ES3(flash)
+;;    Zero-page usage: N+0=src_bsr, N+1=dst_mask, N+2=dst_bsr,
+;;                     N+3=dst_ic, N+4:N+5=addr_ptr, N+6=temp
 ;;
-;;    EEC! - placeholder for L28
-;;
-EECSTORE:	DATA.W (EECSTORE+2)
-		LDX #4	
-    		LDA stack+3,Y
-L2046  		ROR A
-    		PHA
-    		LDA stack+2,Y
-    		ROR A
-    		STA stack+2,Y
-    		PLA
-    		DEX
-    		BNE L2046
-    		LDX stack+2,Y
-    		STX PortD
-    		ROR A
-    		ROR A
-    		PHP
-    		LSR A
-    		PLP
-    		ROR A
-    		SEC
-    		ROR A
-    		STA PortC
-    		LDA #$60
-    		NOP
-    		NOP
-    		LDA stack+4,Y
-		NOP
-		NOP
-    		STA PortD
-    		LDA stack,Y
-    		STA LCBCLR
-    		LDA stack+1,Y
-    		STA LCB
-	L2071  	NOP
-		NOP
-		NOP
-    	NOP
-		NOP
-    		LDA #$e0
-    		NOP
-    		NOP
-    		INY
-    		INY
-    		JMP POPTWO
+BANKCOPY:	DATA.W (BANKCOPY+2)
+	; Compute source BSR: IC_TABLE[src_ic] | src_bank
+		LDX stack+6,Y	; src_ic
+		LDA .IC_TABLE,X
+		ORA stack+4,Y	; src_bank
+		STA N		; N+0 = source BSR4 value
+	; Compute dest BSR mask and full value
+		LDX stack+2,Y	; dst_ic
+		LDA .IC_TABLE,X
+		STA N+1		; N+1 = dest IC BSR mask (no page)
+		ORA stack,Y	; dst_bank
+		STA N+2		; N+2 = dest BSR4 value (mask|page)
+	; Save dest IC type (0=RAM, 2/3=flash)
+		LDA stack+2,Y
+		STA N+3		; N+3 = dest IC
+	; Drop 4 cells from data stack
+		TYA
+		CLC
+		ADC #8
+		TAY
+	; If dest is flash, erase two 4K sectors
+		LDA N+3
+		BEQ .copy	; IC 0 = RAM, skip erase
+		JSR .erase_lo
+		JSR .erase_hi
+	; Init address pointer to $8000 (start of BSR4 window)
+.copy:		LDA #$00
+		STA N+4		; addr low = $00
+		LDA #$80
+		STA N+5		; addr high = $80
+.byte_loop:
+	; Read source byte
+		LDA N		; source BSR4
+		STA BSR4
+		LDA (N+4)	; read byte from source window
+		STA N+6		; save data byte
+	; Branch on dest type
+		LDA N+3
+		BNE .flash_prog
+	; RAM write: direct store
+		LDA N+2		; dest BSR4
+		STA BSR4
+		LDA N+6
+		STA (N+4)	; write to dest window
+		BRA .advance
+	; Flash write: unlock + program byte
+.flash_prog:	JSR .unlock
+		LDA N+1
+		ORA #2
+		STA BSR4
+		LDA #$A0
+		STA $9555	; program setup command
+		LDA N+2		; dest BSR4 (target page)
+		STA BSR4
+		LDA N+6
+		STA (N+4)	; write data byte to flash
+	; Poll DQ7 for completion
+.fpoll:		LDA (N+4)
+		EOR N+6
+		AND #$80
+		BNE .fpoll
+	; Advance address pointer
+.advance:	INC N+4
+		BNE .byte_loop
+		INC N+5		; next page
+		LDA N+5
+		CMP #$A0	; past $9FFF?
+		BNE .byte_loop
+	; Restore BSR4 to default and return
+		LDA #$54
+		STA BSR4
+		TIP
+;
+; Unlock subroutine: AA->$5555, 55->$2AAA
+.unlock:	LDA N+1
+		ORA #2		; dest IC, page 2
+		STA BSR4
+		LDA #$AA
+		STA $9555
+		LDA N+1
+		ORA #1		; dest IC, page 1
+		STA BSR4
+		LDA #$55
+		STA $8AAA
+		RTS
+;
+; Erase lower 4K sector ($8000-$8FFF)
+.erase_lo:	JSR .unlock
+		LDA N+1
+		ORA #2
+		STA BSR4
+		LDA #$80
+		STA $9555	; erase setup
+		JSR .unlock
+		LDA N+2		; target page
+		STA BSR4
+		LDA #$30
+		STA $8000	; erase lower sector
+.epoll_lo:	LDA $8000
+		BPL .epoll_lo	; wait for DQ7=1
+		RTS
+;
+; Erase upper 4K sector ($9000-$9FFF)
+.erase_hi:	JSR .unlock
+		LDA N+1
+		ORA #2
+		STA BSR4
+		LDA #$80
+		STA $9555
+		JSR .unlock
+		LDA N+2
+		STA BSR4
+		LDA #$30
+		STA $9000	; erase upper sector
+.epoll_hi:	LDA $9000
+		BPL .epoll_hi
+		RTS
+;
+; IC-to-BSR-mask lookup table
+.IC_TABLE:	data.b $C0	; IC 0 = ES0
+		data.b $00	; IC 1 = unused
+		data.b $90	; IC 2 = ES2
+		data.b $50	; IC 3 = ES3
 ;;
 ;;
 ;;
 BANKPSH:	DATA.W (BANKPSH+2)
-		JMP POP	
+	; ( bank -- ) Save BSR4, switch $8000-$9FFF to ES0 page 'bank'
+		LDA BSR4	; read current BSR4
+		PHA		; save on hardware stack
+		LDA stack,Y	; get bank number (TOS)
+		AND #$0F	; mask to pages 0-15
+		ORA #$C0	; ES3=1,ES2=1,A17=0,ES0=0(active)
+		STA BSR4	; switch $8000-$9FFF to ES0 page
+		JMP POP		; drop bank number, return
 ;;
 ;;
 ;;
 BANKPOP:	DATA.W (BANKPOP+2)	; DV
-		PLI
+		PLA		; restore saved BSR4
+		STA BSR4	; switch bank back
+		PLI		; restore I_reg
 		TIP
 ;;
 ;;
@@ -2481,19 +2646,250 @@ BANKCAT:	DATA.W (BANKCAT+2)
 ;;
 ;;
 ;;
-BANKEECS:	DATA.W (BANKEECS+2)
-		PHI
-    		JPI (BANKPSH)
-    		JPI (EECSTORE)
-    		JPI (BANKPOP)
-;;
-;;
-;;
 BANKEXEC:	DATA.W (BANKEXEC+2)
 		PHI
     		JPI (BANKPSH)
     		JPI (EXECUTE)
     		JPI (BANKPOP)
+;;
+;;    SKEY - blocking serial input, bypasses UKEY vector
+;;    ( -- c )
+SKEY:		DATA.W (SKEY+2)
+		JSR L518		; reuse existing serial poll+read
+		JMP PUSH0A		; push char to data stack
+;;
+;;    SEMIT - serial output, bypasses UEMIT vector
+;;    ( c -- )
+SEMIT:		DATA.W (SEMIT+2)
+		LDA stack,Y
+		JSR XEMIT		; reuse existing serial send
+		JMP POP
+;;
+;;    SSTAT - serial status (non-blocking)
+;;    ( -- flag )  1 = data available, 0 = not
+SSTAT:		DATA.W (SSTAT+2)
+		LDA SSR
+		AND #$01		; BF bit
+		JMP PUSH0A
+;;
+;;    SCR - send CR LF NUL to serial
+;;    ( -- )
+SCR:		DATA.W (SCR+2)
+		LDA #$0D
+		JSR XEMIT
+		LDA #$0A
+		JSR XEMIT
+		LDA #$00
+		JSR XEMIT
+		TIP
+;;
+;;    STYPE - type string to serial port
+;;    ( addr n -- )
+STYPE:		DATA.W (STYPE+2)
+		PHI
+		JPI (DDUP)		; -DUP: dup count if nonzero
+		JPI (ZBRAN)
+			DATA.B $00
+			DATA.W (.ST_END - addr)
+		JPI (BOUNDS)		; ( addr+n addr )
+		JPI (DO)
+.ST_LP		JPI (R)			; loop index = current addr
+		JPI (CAT)		; fetch byte
+		JPI (SEMIT)		; send to serial
+		JPI (LOOP)
+			DATA.B $00
+			DATA.W (.ST_LP - addr)
+		JPI (SEMIS)
+.ST_END		JPI (DROP)		; drop addr when count=0
+		JPI (SEMIS)
+;;
+;;    SEXPECT - read n bytes from serial into buffer (no echo)
+;;    ( addr n -- )
+SEXPECT:	DATA.W (SEXPECT+2)
+		PHI
+		JPI (DDUP)		; -DUP count
+		JPI (ZBRAN)
+			DATA.B $00
+			DATA.W (.SE_END - addr)
+		JPI (BOUNDS)		; ( addr+n addr )
+		JPI (DO)
+.SE_LP		JPI (SKEY)		; blocking read from serial
+		JPI (R)			; loop index = current addr
+		JPI (CSTOR)		; store byte at addr
+		JPI (LOOP)
+			DATA.B $00
+			DATA.W (.SE_LP - addr)
+		JPI (SEMIS)
+.SE_END		JPI (DROP)
+		JPI (SEMIS)
+;;
+;;    SETSERIAL - configure serial port
+;;    ( bps parity bits stop -- )
+;;    parity: 0=none 1=odd 2=even  bits: 5-8  stop: 1-2
+SETSERIAL:	DATA.W (SETSERIAL+2)
+	; stack,Y=stop  stack+2,Y=bits  stack+4,Y=parity  stack+6,Y=bps
+	;
+	; --- Build SLCR register value ---
+		LDA stack,Y		; stop (1 or 2)
+		SEC
+		SBC #1			; 0 or 1
+		ASL A
+		ASL A			; 0 or 4 (bit 2)
+		STA N			; save stop bits
+		LDA stack+2,Y		; bits (5-8)
+		SEC
+		SBC #5			; 0-3
+		ORA N
+		STA N			; N = stop|bits
+		LDA stack+4,Y		; parity
+		BEQ .ss_nopar		; 0 = none
+		LDA N
+		ORA #$08		; bit 3 = parity enable
+		STA N
+		LDA stack+4,Y
+		CMP #2
+		BNE .ss_nopar		; 1=odd (bit 3 only), 2=even
+		LDA N
+		ORA #$10		; bit 4 = even
+		STA N
+.ss_nopar:	LDA N
+		STA SLCR
+	;
+	; --- 16×16→32 multiply: KHZ * 1000 ---
+	; Multiplier (KHZ) in N+2:N+3, result in N+4:N+5:N+6:N+7
+		LDX #$52
+		LDA (UP),X		; KHZ low
+		STA N+2
+		INX
+		LDA (UP),X		; KHZ high
+		STA N+3
+		STI #0, N+4
+		STI #0, N+5
+		STI #0, N+6
+		STI #0, N+7
+		LDX #16
+.ss_mul:	ASL N+4			; shift 32-bit result left
+		ROL N+5
+		ROL N+6
+		ROL N+7
+		ASL N+2			; shift multiplier MSB into carry
+		ROL N+3
+		BCC .ss_madd
+		CLC			; add 1000 ($03E8) to result
+		LDA N+4
+		ADC #$E8
+		STA N+4
+		LDA N+5
+		ADC #$03
+		STA N+5
+		BCC .ss_madd
+		INC N+6
+		BNE .ss_madd
+		INC N+7
+.ss_madd:	DEX
+		BNE .ss_mul
+	;
+	; --- 32÷16 divide: (KHZ*1000) / bps ---
+	; Dividend in N+4..N+7, divisor = bps (stack+6,Y : stack+7,Y)
+	; Quotient → N+0:N+1, remainder → N+2:N+3
+		STI #0, N
+		STI #0, N+1
+		STI #0, N+2
+		STI #0, N+3
+		LDX #32
+.ss_div:	ASL N+4			; shift dividend left into remainder
+		ROL N+5
+		ROL N+6
+		ROL N+7
+		ROL N+2
+		ROL N+3
+		LDA N+2			; trial subtract divisor
+		SEC
+		SBC stack+6,Y		; bps lo
+		STA TOS
+		LDA N+3
+		SBC stack+7,Y		; bps hi
+		BCC .ss_dsk		; remainder < divisor
+		STA N+3			; commit subtraction
+		LDA TOS
+		STA N+2
+.ss_dsk:	ROL N			; shift carry into quotient
+		ROL N+1
+		DEX
+		BNE .ss_div
+	; N+0:N+1 = total divisor
+	;
+	; --- Factor divisor into (n+1)*(l+1), l ≤ 255 ---
+		LDA N+1
+		BEQ .ss_small		; high byte 0 → divisor ≤ 255
+		CMP #1
+		BNE .ss_fact
+		LDA N
+		BEQ .ss_small		; divisor = 256
+.ss_fact:
+	; n+1 = ceil(divisor/256)
+	; = high byte, +1 if low byte nonzero
+		LDA N+1			; high byte
+		LDX N			; low byte
+		BEQ .ss_noinc		; exact multiple of 256
+		CLC
+		ADC #1			; round up
+.ss_noinc:	STA N+2			; N+2 = n+1
+	; Divide N+0:N+1 by N+2 (8-bit) → quotient = l+1
+	; Save divisor on hardware stack for safety
+		LDA N+1
+		PHA
+		LDA N
+		PHA
+	; 16÷8 division: dividend N+0:N+1, divisor N+2
+		LDA #0			; remainder
+		LDX #16
+.ss_d8:		ASL N
+		ROL N+1
+		ROL A
+		CMP N+2
+		BCC .ss_d8s
+		SBC N+2
+.ss_d8s:	DEX
+		BNE .ss_d8
+	; Quotient shifted into N+0 (low 8 bits of quotient)
+	; N+0 = l+1
+		LDA N			; l+1
+		SEC
+		SBC #1
+		STA N+4			; l
+		LDA N+2
+		SEC
+		SBC #1
+		STA N+5			; n
+	; Restore divisor (not needed, but clean up stack)
+		PLA			; discard saved lo
+		PLA			; discard saved hi
+		BRA .ss_setreg
+.ss_small:
+	; divisor ≤ 256: n=0, l=divisor-1
+		LDA N
+		SEC
+		SBC #1
+		STA N+4			; l
+		STI #0, N+5		; n = 0
+.ss_setreg:
+	; N+4 = l, N+5 = n
+		STI #$00, TBM		; interval timer mode
+		LDA N+5
+		STA TBLL		; Timer B lower latch = n
+		STI #$00, TBUL		; upper latch = 0 (triggers reload)
+		LDA N+4
+		STA SIDL		; RX divider = l
+		STA SODL		; TX divider = l
+		STI #$E0, SMR		; enable TXD, RXD, Timer B
+		STI #$00, SFR		; normal operation
+	; Drop 4 cells from stack
+		TYA
+		CLC
+		ADC #8
+		TAY
+		TIP
 
 unkn5: 		STA W
     		STI #0, W+1
@@ -2538,7 +2934,7 @@ L2161  		JSR L1836
     		JMP SELECT+2
 XKEY:		LDA #0
     		STA DSK_CTL
-    		JMP L518
+    		JMP (UKEY)			; → L518 (terminal) or CONKEY (console)
 ;;
 ;;    CTLRQ - check for control-R
 ;;
@@ -2547,7 +2943,7 @@ CTLRQ:	DATA.W (CTLRQ+2)
     		JPI (CR)
     		JPI (LIT)
     				DATA.B $00
-    				DATA.W ACIA_DATA
+    				DATA.W SIB
     		JPI (CAT)
     		JPI (CLIT)
     		DATA.B $00, $12, $00			; Control-R
@@ -2588,6 +2984,1208 @@ MMON:	DATA.W (MMON+2)
 					DATA.B $00
 					DATA.W (.MMON_1 - addr)
 
+;;
+;; CONKEY — console keyboard input (reads from ring buffer)
+;;
+CONKEY:		LDA #0
+		STA DSK_CTL		; deselect disk
+.KWAIT:		LDA KBUF_HEAD
+		CMP KBUF_TAIL
+		BEQ .KWAIT		; spin until buffer has data
+		LDX KBUF_TAIL
+		LDA KBUF,X		; read character
+		PHA			; save character
+		INX
+		TXA
+		AND #KBUF_MASK
+		STA KBUF_TAIL		; advance tail
+		PLA			; restore character
+		RTS
+
+;;
+;; KBDISR — Keyboard Interrupt Service Routine
+;;   Scans matrix via Port D (rows) / Port C (columns).
+;;   Uses 8x BBS for fast column decode (no loop).
+;;   Called via IRQ0 vector ($FFF0) — PA0 edge detect.
+;;
+KBDISR:		PHA
+		PHX			; save registers
+		;; Scan rows: drive each row via Port D, read Port C
+		LDX #0			; row index
+		STI #$01, PortD		; drive row 0
+		LDA PortC
+		BNE .KB_FOUND
+		LDX #1
+		STI #$02, PortD		; drive row 1
+		LDA PortC
+		BNE .KB_FOUND
+		LDX #2
+		STI #$04, PortD		; drive row 2
+		LDA PortC
+		BNE .KB_FOUND
+		LDX #3
+		STI #$08, PortD		; drive row 3
+		LDA PortC
+		BNE .KB_FOUND
+		LDX #4
+		STI #$10, PortD		; drive row 4
+		LDA PortC
+		BNE .KB_FOUND
+		LDX #5
+		STI #$20, PortD		; drive row 5
+		LDA PortC
+		BNE .KB_FOUND
+		LDX #6
+		STI #$40, PortD		; drive row 6
+		LDA PortC
+		BNE .KB_FOUND
+		LDX #7
+		STI #$80, PortD		; drive row 7
+		LDA PortC
+		BNE .KB_FOUND
+		BRA .KB_DONE		; no key found (spurious IRQ)
+.KB_FOUND:
+		;; A = column bits, X = row number
+		;; Use BBS to find column — fast, no loop
+		STA N			; save column bits in zp scratch
+		TXA
+		ASL
+		ASL
+		ASL			; A = row * 8 (base scancode)
+		TAX			; X = base scancode
+		BBS 0, N, .KB_GOTCOL
+		INX
+		BBS 1, N, .KB_GOTCOL
+		INX
+		BBS 2, N, .KB_GOTCOL
+		INX
+		BBS 3, N, .KB_GOTCOL
+		INX
+		BBS 4, N, .KB_GOTCOL
+		INX
+		BBS 5, N, .KB_GOTCOL
+		INX
+		BBS 6, N, .KB_GOTCOL
+		INX
+.KB_GOTCOL:
+		;; X = scancode (row*8 + col)
+		;; Check modifiers: drive row 6, check SHIFT/CTRL
+		STI #$40, PortD
+		BBS 0, PortC, .KB_SHIFT
+		BBS 1, PortC, .KB_CTRL
+		;; No modifier — unshifted lookup
+		LDA KEYMAP_NORMAL,X
+		BRA .KB_STORE
+.KB_SHIFT:
+		LDA KEYMAP_SHIFTED,X
+		BRA .KB_STORE
+.KB_CTRL:
+		LDA KEYMAP_NORMAL,X	; get base char
+		AND #$1F		; convert to control char
+.KB_STORE:
+		;; Store character in ring buffer if non-zero
+		BEQ .KB_DONE		; skip null entries (modifier keys)
+		PHX
+		LDX KBUF_HEAD
+		STA KBUF,X		; store in buffer
+		INX
+		TXA
+		AND #KBUF_MASK
+		STA KBUF_HEAD		; advance head
+		PLX
+.KB_DONE:
+		;; Clear PA0 interrupt flag (CIR bit 6)
+		LDA CIR
+		AND #$BF		; clear bit 6 (PA0 edge flag)
+		STA CIR
+		STI #$00, PortD		; deselect all rows
+		PLX
+		PLA
+		RTI
+
+;;
+;; Keyboard lookup tables (64 bytes each)
+;;
+KEYMAP_NORMAL:
+	DATA.B '1', '2', '3', '4', '5', '6', '7', '8'
+	DATA.B '9', '0', '-', '=', $08, $09, '.', '/'
+	DATA.B 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I'
+	DATA.B 'O', 'P', '[', ']', $0D, 'A', 'S', 'D'
+	DATA.B 'F', 'G', 'H', 'J', 'K', 'L', ';', $27
+	DATA.B 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ','
+	DATA.B $00, $00, '`', '\', ' ', $1B, $7F, $00
+	DATA.B $00, $00, $00, $00, $00, $00, $00, $00
+
+KEYMAP_SHIFTED:
+	DATA.B '!', '@', '#', '$', '%', '^', '&', '*'
+	DATA.B '(', ')', '_', '+', $08, $09, '>', '?'
+	DATA.B 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i'
+	DATA.B 'o', 'p', '{', '}', $0D, 'a', 's', 'd'
+	DATA.B 'f', 'g', 'h', 'j', 'k', 'l', ':', '"'
+	DATA.B 'z', 'x', 'c', 'v', 'b', 'n', 'm', '<'
+	DATA.B $00, $00, '~', '|', ' ', $1B, $7F, $00
+	DATA.B $00, $00, $00, $00, $00, $00, $00, $00
+
+;;
+;; ============================================================================
+;; ST7586S LCD Display Driver (240x160, 40x20 text via 5x7 font in 6x8 cells)
+;; ============================================================================
+;;
+
+;;
+;; LCD_INIT — Initialize ST7586S controller and clear display
+;;   Called from COLD in console mode.
+;;
+LCD_INIT:
+		LDA LCD_INITED			; skip if already initialized
+		BEQ .LCD_DOINIT			; not yet — go initialize
+		RTS
+.LCD_DOINIT:	;; Sleep Out
+		LDA #$11
+		STA LCD_CMD
+		;; Display OFF (while configuring)
+		LDA #$28
+		STA LCD_CMD
+		;; Vop = 0x0145
+		LDA #$C0
+		STA LCD_CMD
+		LDA #$45
+		STA LCD_DATA
+		LDA #$01
+		STA LCD_DATA
+		;; BIAS = 1/14
+		LDA #$C3
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		;; Booster = x8
+		LDA #$C4
+		STA LCD_CMD
+		LDA #$07
+		STA LCD_DATA
+		;; Enable Analog Circuit
+		LDA #$D0
+		STA LCD_CMD
+		LDA #$1D
+		STA LCD_DATA
+		;; N-Line = 0
+		LDA #$B5
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		;; Monochrome Mode (idle on)
+		LDA #$39
+		STA LCD_CMD
+		;; DDRAM interface = 2 pixels/byte
+		LDA #$3A
+		STA LCD_CMD
+		LDA #$02
+		STA LCD_DATA
+		;; Scan Direction: MY=0, MX=0 (normal orientation)
+		LDA #$36
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		;; Duty = 160
+		LDA #$B0
+		STA LCD_CMD
+		LDA #$9F
+		STA LCD_DATA
+		;; Inversion OFF
+		LDA #$20
+		STA LCD_CMD
+		;; Scroll Area: TFA=0, VSA=160, BFA=0
+		LDA #$33
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA			; TFA hi
+		LDA #$00
+		STA LCD_DATA			; TFA lo
+		LDA #$00
+		STA LCD_DATA			; VSA hi
+		LDA #$A0
+		STA LCD_DATA			; VSA lo (160)
+		LDA #$00
+		STA LCD_DATA			; BFA hi
+		LDA #$00
+		STA LCD_DATA			; BFA lo
+		;; Scroll Start = 0
+		LDA #$37
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		;; Default contrast
+		LDA #$C7
+		STA LCD_CMD
+		LDA #$28
+		STA LCD_DATA
+		;; Clear cursor state
+		STI #0, LCD_COL
+		STI #0, LCD_ROW
+		STI #0, LCD_TOPPAGE
+		;; Clear display
+		JSR LCD_CLR
+		;; Display ON
+		LDA #$29
+		STA LCD_CMD
+		LDA #$FF
+		STA LCD_INITED
+		RTS
+
+;;
+;; LCD_CLR — Clear visible display RAM (120 cols x 160 rows)
+;;   Clobbers A, X
+;;
+LCD_CLR:
+		;; Set column window: COL_OFFSET to COL_OFFSET+119
+		LDA #$2A
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA			; SC hi
+		LDA #COL_OFFSET
+		STA LCD_DATA			; SC lo
+		LDA #$00
+		STA LCD_DATA			; EC hi
+		LDA #(COL_OFFSET+119)
+		STA LCD_DATA			; EC lo
+		;; Set row window: 0 to 159
+		LDA #$2B
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA			; SR hi
+		LDA #$00
+		STA LCD_DATA			; SR lo
+		LDA #$00
+		STA LCD_DATA			; ER hi
+		LDA #159
+		STA LCD_DATA			; ER lo
+		;; Write 19,200 = 160 * 120 zero bytes
+		LDA #$2C
+		STA LCD_CMD
+		LDX #160
+.CLR_ROW:	PHX
+		LDX #120
+		LDA #$00
+.CLR_BYTE:	STA LCD_DATA
+		DEX
+		BNE .CLR_BYTE
+		PLX
+		DEX
+		BNE .CLR_ROW
+		RTS
+
+;;
+;; LCD_SETPOS — Set ST7586S window for character cell, issue 0x2C
+;;   Page = (LCD_TOPPAGE + LCD_ROW) mod 20
+;;   Byte column = LCD_COL * 3 + COL_OFFSET
+;;   Clobbers A, N, N+1
+;;
+LCD_SETPOS:
+		;; RAM row = ((LCD_TOPPAGE + LCD_ROW) mod 20) * 8
+		LDA LCD_TOPPAGE
+		CLC
+		ADC LCD_ROW
+		CMP #20
+		BCC .SP_OK
+		SBC #20
+.SP_OK:		ASL A
+		ASL A
+		ASL A				; * 8 = RAM row start
+		STA N				; row_start
+		;; Byte column = LCD_COL * 3 + COL_OFFSET
+		LDA LCD_COL
+		STA N+1
+		ASL A				; *2
+		CLC
+		ADC N+1				; *3
+		CLC
+		ADC #COL_OFFSET
+		STA N+1				; byte_col_start
+		;; Column Address Set (0x2A)
+		LDA #$2A
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA N+1
+		STA LCD_DATA			; col start
+		LDA #$00
+		STA LCD_DATA
+		LDA N+1
+		CLC
+		ADC #2
+		STA LCD_DATA			; col end (start + 2)
+		;; Row Address Set (0x2B)
+		LDA #$2B
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA			; row start
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		CLC
+		ADC #7
+		STA LCD_DATA			; row end (start + 7)
+		;; Memory Write
+		LDA #$2C
+		STA LCD_CMD
+		RTS
+
+;; Pixel pair lookup: index = (left_bit << 1) | right_bit
+;; Maps 2-bit pair to ST7586S byte encoding
+PIX_PAIR:	DATA.B $00, $18, $C0, $D8
+
+;;
+;; LCD_PUTCH — Write character glyph at current cursor position
+;;   A = character code (0-255)
+;;   Preserves Y (data stack pointer)
+;;   Clobbers A, X, N, N+1, W
+;;
+LCD_PUTCH:
+		PHA				; save character
+		JSR LCD_SETPOS			; set window + 0x2C
+		PLA				; restore character
+		;; Calculate font address: FONT5X7 + (char & $7F) * 8
+		AND #$7F			; clamp to 0-127
+		STA N
+		STI #0, N+1
+		ASL A
+		ROL N+1
+		ASL A
+		ROL N+1
+		ASL A
+		ROL N+1				; A:N+1 = char * 8 (lo in A)
+		CLC
+		ADC #<FONT5X7
+		STA N
+		LDA N+1
+		ADC #>FONT5X7
+		STA N+1				; N:N+1 = font row address
+		;; Row loop: 8 rows using X as index (RC19 uses (zp),X not (zp),Y)
+		PHY				; save data stack pointer
+		LDX #0				; row index
+.ROW:		LDA (N),X			; load row byte (bit4=col0 ... bit0=col4)
+		STA W				; save for reuse
+		PHX				; save row counter
+		;; Pair 0 (cols 0,1): (row >> 3) & 3
+		LSR A
+		LSR A
+		LSR A
+		AND #$03
+		TAX
+		LDA PIX_PAIR,X
+		STA LCD_DATA
+		;; Pair 1 (cols 2,3): (row >> 1) & 3
+		LDA W
+		LSR A
+		AND #$03
+		TAX
+		LDA PIX_PAIR,X
+		STA LCD_DATA
+		;; Pair 2 (col 4, blank=0): (row & 1) << 1
+		LDA W
+		AND #$01
+		ASL A
+		TAX
+		LDA PIX_PAIR,X
+		STA LCD_DATA
+		;; Next row
+		PLX				; restore row counter
+		INX
+		CPX #8
+		BNE .ROW
+		PLY				; restore data stack pointer
+		RTS
+
+;;
+;; LCD_XEMIT — Character output for LCD (UEMIT vector target)
+;;   On entry: A = character
+;;   Preserves Y (data stack pointer)
+;;   Returns via RTS
+;;
+LCD_XEMIT:
+		CMP #$0D			; carriage return?
+		BEQ .LX_CR
+		CMP #$0A			; line feed?
+		BEQ .LX_LF
+		CMP #$08			; backspace?
+		BEQ .LX_BS
+		CMP #$00			; null? (CR word sends CR,LF,NUL)
+		BEQ .LX_NUL
+		;; Normal printable character
+		JSR LCD_PUTCH
+		;; Advance cursor column
+		INC LCD_COL
+		LDA LCD_COL
+		CMP #40
+		BCS .LX_WRAP			; column overflow
+		RTS
+.LX_WRAP:	;; Column overflow — wrap to next line
+		STI #0, LCD_COL
+		BRA .LX_LF
+.LX_CR:		STI #0, LCD_COL			; carriage return: column = 0
+		RTS
+.LX_BS:		;; Backspace: move cursor left (EMIT handles erase)
+		LDA LCD_COL
+		BEQ .LX_NUL			; already at column 0, return
+		DEC LCD_COL
+.LX_NUL:	RTS				; ignore null bytes / return
+.LX_LF:	;; Line feed: advance to next row
+		INC LCD_ROW
+		LDA LCD_ROW
+		CMP #20
+		BCC .LX_RET			; still on screen
+		;; Scroll: row 19 stays, advance top page
+		LDA #19
+		STA LCD_ROW
+		INC LCD_TOPPAGE
+		LDA LCD_TOPPAGE
+		CMP #20				; mod 20
+		BCC .LX_NOWRAP
+		LDA #0
+.LX_NOWRAP:	STA LCD_TOPPAGE
+		;; Set scroll start = LCD_TOPPAGE * 8
+		ASL A
+		ASL A
+		ASL A
+		PHA
+		LDA #$37			; Set Scroll Start Address
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA			; VSP hi
+		PLA
+		STA LCD_DATA			; VSP lo
+		;; Clear the new bottom row
+		JSR LCD_CLR_ROW
+		;; Clear ghost row above visible
+		LDA LCD_TOPPAGE
+		SEC
+		SBC #1
+		BPL .LX_GHOST
+		LDA #19				; wrap 0 → 19
+.LX_GHOST:	;; Calculate ghost RAM row = page * 8
+		ASL A
+		ASL A
+		ASL A
+		STA N
+		;; Set window for ghost row clear
+		LDA #$2A
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA #COL_OFFSET
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA #(COL_OFFSET+119)
+		STA LCD_DATA
+		LDA #$2B
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		CLC
+		ADC #7
+		STA LCD_DATA
+		LDA #$2C
+		STA LCD_CMD
+		LDX #8
+.LX_GR:	PHX
+		LDX #120
+		LDA #$00
+.LX_GB:	STA LCD_DATA
+		DEX
+		BNE .LX_GB
+		PLX
+		DEX
+		BNE .LX_GR
+.LX_RET:	RTS
+
+;;
+;; LCD_CLR_ROW — Clear current bottom text row (8 pixel rows)
+;;   Clobbers A, X, N
+;;
+LCD_CLR_ROW:
+		LDA LCD_TOPPAGE
+		CLC
+		ADC LCD_ROW
+		CMP #20				; mod 20
+		BCC .LCR_OK
+		SBC #20
+.LCR_OK:	ASL A
+		ASL A
+		ASL A				; row_start
+		STA N
+		;; Set window: full width, 8 rows
+		LDA #$2A
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA #COL_OFFSET
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA #(COL_OFFSET+119)
+		STA LCD_DATA
+		LDA #$2B
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		CLC
+		ADC #7
+		STA LCD_DATA
+		;; Write 120*8 = 960 zero bytes
+		LDA #$2C
+		STA LCD_CMD
+		LDX #8
+.LCR_ROW:	PHX
+		LDX #120
+		LDA #$00
+.LCR_BYTE:	STA LCD_DATA
+		DEX
+		BNE .LCR_BYTE
+		PLX
+		DEX
+		BNE .LCR_ROW
+		RTS
+
+;;
+;; LCDCLR — Forth word: clear LCD and reset cursor ( -- )
+;;
+LCDCLR:		DATA.W (LCDCLR+2)
+		STI #0, LCD_COL
+		STI #0, LCD_ROW
+		STI #0, LCD_TOPPAGE
+		;; Reset scroll start to 0
+		LDA #$37
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		JSR LCD_CLR
+		TIP
+
+;;
+;; LCDAT — Forth word: set LCD cursor position ( col row -- )
+;;
+LCDAT:		DATA.W (LCDAT+2)
+		LDA stack,Y			; row (low byte)
+		STA LCD_ROW
+		LDA stack+2,Y			; col (low byte)
+		STA LCD_COL
+		JMP POPTWO
+
+;;
+;;    CONTRAST ( n -- ) — set LCD contrast via ST7586S Vop offset
+;;
+CONTRAST:	DATA.W (CONTRAST+2)
+		LDA #$C7
+		STA LCD_CMD
+		LDA stack,Y			; contrast value
+		STA LCD_DATA
+		JMP POP
+
+; 5x7 Font Table — Row-based format for ST7586S
+; 128 characters x 8 bytes = 1024 bytes (chars 0-127, LCD_PUTCH masks with $7F)
+; Each byte is one row: bit4=col0, bit3=col1, bit2=col2, bit1=col3, bit0=col4
+;
+FONT5X7:
+	DATA.B $00, $00, $00, $00, $00, $00, $00, $00  ;   0
+	DATA.B $0E, $1F, $15, $1F, $1B, $11, $0E, $00  ;   1
+	DATA.B $0E, $1F, $15, $1F, $11, $1B, $0E, $00  ;   2
+	DATA.B $00, $0A, $1F, $1F, $1F, $0E, $04, $00  ;   3
+	DATA.B $00, $04, $0E, $1F, $1F, $0E, $04, $00  ;   4
+	DATA.B $0E, $0A, $1F, $15, $1F, $04, $0E, $00  ;   5
+	DATA.B $04, $0E, $1F, $1F, $1F, $04, $0E, $00  ;   6
+	DATA.B $00, $00, $04, $0E, $0E, $04, $00, $00  ;   7
+	DATA.B $1F, $1F, $1B, $11, $11, $1B, $1F, $1F  ;   8
+	DATA.B $00, $00, $04, $0A, $0A, $04, $00, $00  ;   9
+	DATA.B $1F, $1F, $1B, $15, $15, $1B, $1F, $1F  ;  10
+	DATA.B $00, $07, $03, $0D, $14, $14, $08, $00  ;  11
+	DATA.B $0E, $11, $11, $0E, $04, $1F, $04, $00  ;  12
+	DATA.B $0F, $09, $0F, $08, $08, $08, $18, $00  ;  13
+	DATA.B $0F, $09, $0F, $09, $09, $0B, $18, $00  ;  14
+	DATA.B $04, $15, $0E, $1B, $1B, $0E, $15, $04  ;  15
+	DATA.B $10, $18, $1E, $1F, $1E, $18, $10, $00  ;  16
+	DATA.B $01, $03, $0F, $1F, $0F, $03, $01, $00  ;  17
+	DATA.B $04, $0E, $15, $04, $15, $0E, $04, $00  ;  18
+	DATA.B $1B, $1B, $1B, $1B, $1B, $00, $1B, $00  ;  19
+	DATA.B $0F, $15, $15, $0D, $05, $05, $05, $00  ;  20
+	DATA.B $06, $09, $0A, $05, $02, $09, $09, $06  ;  21
+	DATA.B $00, $00, $00, $00, $00, $1F, $1F, $00  ;  22
+	DATA.B $04, $0E, $15, $04, $15, $0E, $04, $1F  ;  23
+	DATA.B $00, $04, $0E, $15, $04, $04, $04, $00  ;  24
+	DATA.B $00, $04, $04, $04, $15, $0E, $04, $00  ;  25
+	DATA.B $00, $04, $02, $1F, $02, $04, $00, $00  ;  26
+	DATA.B $00, $04, $08, $1F, $08, $04, $00, $00  ;  27
+	DATA.B $00, $10, $10, $10, $1F, $00, $00, $00  ;  28
+	DATA.B $00, $0A, $1F, $1F, $0A, $00, $00, $00  ;  29
+	DATA.B $00, $04, $04, $0E, $1F, $1F, $00, $00  ;  30
+	DATA.B $00, $1F, $1F, $0E, $04, $04, $00, $00  ;  31
+	DATA.B $00, $00, $00, $00, $00, $00, $00, $00  ;  32 ' '
+	DATA.B $04, $04, $04, $04, $04, $00, $04, $00  ;  33 '!'
+	DATA.B $0A, $0A, $0A, $00, $00, $00, $00, $00  ;  34 '"'
+	DATA.B $0A, $0A, $1F, $0A, $1F, $0A, $0A, $00  ;  35 '#'
+	DATA.B $04, $0F, $14, $0E, $05, $1E, $04, $00  ;  36 '$'
+	DATA.B $18, $19, $02, $04, $08, $13, $03, $00  ;  37 '%'
+	DATA.B $08, $14, $14, $08, $15, $12, $0D, $00  ;  38 '&'
+	DATA.B $06, $06, $04, $08, $00, $00, $00, $00  ;  39 '''
+	DATA.B $02, $04, $08, $08, $08, $04, $02, $00  ;  40 '('
+	DATA.B $08, $04, $02, $02, $02, $04, $08, $00  ;  41 ')'
+	DATA.B $04, $15, $0E, $1F, $0E, $15, $04, $00  ;  42 '*'
+	DATA.B $00, $04, $04, $1F, $04, $04, $00, $00  ;  43 '+'
+	DATA.B $00, $00, $00, $00, $06, $06, $04, $08  ;  44 ','
+	DATA.B $00, $00, $00, $1F, $00, $00, $00, $00  ;  45 '-'
+	DATA.B $00, $00, $00, $00, $00, $06, $06, $00  ;  46 '.'
+	DATA.B $00, $01, $02, $04, $08, $10, $00, $00  ;  47 '/'
+	DATA.B $0E, $11, $13, $15, $19, $11, $0E, $00  ;  48 '0'
+	DATA.B $04, $0C, $04, $04, $04, $04, $0E, $00  ;  49 '1'
+	DATA.B $0E, $11, $01, $0E, $10, $10, $1F, $00  ;  50 '2'
+	DATA.B $1F, $01, $02, $06, $01, $11, $0E, $00  ;  51 '3'
+	DATA.B $02, $06, $0A, $12, $1F, $02, $02, $00  ;  52 '4'
+	DATA.B $1F, $10, $1E, $01, $01, $11, $0E, $00  ;  53 '5'
+	DATA.B $07, $08, $10, $1E, $11, $11, $0E, $00  ;  54 '6'
+	DATA.B $1F, $01, $01, $02, $04, $08, $10, $00  ;  55 '7'
+	DATA.B $0E, $11, $11, $0E, $11, $11, $0E, $00  ;  56 '8'
+	DATA.B $0E, $11, $11, $0F, $01, $02, $1C, $00  ;  57 '9'
+	DATA.B $00, $00, $04, $00, $04, $00, $00, $00  ;  58 ':'
+	DATA.B $00, $00, $04, $00, $04, $04, $08, $00  ;  59 ';'
+	DATA.B $01, $02, $04, $08, $04, $02, $01, $00  ;  60 '<'
+	DATA.B $00, $00, $1F, $00, $1F, $00, $00, $00  ;  61 '='
+	DATA.B $08, $04, $02, $01, $02, $04, $08, $00  ;  62 '>'
+	DATA.B $0E, $11, $01, $06, $04, $00, $04, $00  ;  63 '?'
+	DATA.B $0E, $11, $15, $17, $16, $10, $0F, $00  ;  64 '@'
+	DATA.B $04, $0A, $11, $11, $1F, $11, $11, $00  ;  65 'A'
+	DATA.B $1E, $11, $11, $1E, $11, $11, $1E, $00  ;  66 'B'
+	DATA.B $0E, $11, $10, $10, $10, $11, $0E, $00  ;  67 'C'
+	DATA.B $1E, $11, $11, $11, $11, $11, $1E, $00  ;  68 'D'
+	DATA.B $1F, $10, $10, $1E, $10, $10, $1F, $00  ;  69 'E'
+	DATA.B $1F, $10, $10, $1E, $10, $10, $10, $00  ;  70 'F'
+	DATA.B $0F, $11, $10, $10, $13, $11, $0F, $00  ;  71 'G'
+	DATA.B $11, $11, $11, $1F, $11, $11, $11, $00  ;  72 'H'
+	DATA.B $0E, $04, $04, $04, $04, $04, $0E, $00  ;  73 'I'
+	DATA.B $07, $02, $02, $02, $02, $12, $0C, $00  ;  74 'J'
+	DATA.B $11, $12, $14, $18, $14, $12, $11, $00  ;  75 'K'
+	DATA.B $10, $10, $10, $10, $10, $10, $1F, $00  ;  76 'L'
+	DATA.B $11, $1B, $15, $15, $15, $11, $11, $00  ;  77 'M'
+	DATA.B $11, $11, $19, $15, $13, $11, $11, $00  ;  78 'N'
+	DATA.B $0E, $11, $11, $11, $11, $11, $0E, $00  ;  79 'O'
+	DATA.B $1E, $11, $11, $1E, $10, $10, $10, $00  ;  80 'P'
+	DATA.B $0E, $11, $11, $11, $15, $12, $0D, $00  ;  81 'Q'
+	DATA.B $1E, $11, $11, $1E, $14, $12, $11, $00  ;  82 'R'
+	DATA.B $0E, $11, $10, $0E, $01, $11, $0E, $00  ;  83 'S'
+	DATA.B $1F, $15, $04, $04, $04, $04, $04, $00  ;  84 'T'
+	DATA.B $11, $11, $11, $11, $11, $11, $0E, $00  ;  85 'U'
+	DATA.B $11, $11, $11, $11, $11, $0A, $04, $00  ;  86 'V'
+	DATA.B $11, $11, $11, $15, $15, $15, $0A, $00  ;  87 'W'
+	DATA.B $11, $11, $0A, $04, $0A, $11, $11, $00  ;  88 'X'
+	DATA.B $11, $11, $0A, $04, $04, $04, $04, $00  ;  89 'Y'
+	DATA.B $1F, $01, $02, $0E, $08, $10, $1F, $00  ;  90 'Z'
+	DATA.B $0F, $08, $08, $08, $08, $08, $0F, $00  ;  91 '['
+	DATA.B $00, $10, $08, $04, $02, $01, $00, $00  ;  92 '\'
+	DATA.B $0F, $01, $01, $01, $01, $01, $0F, $00  ;  93 ']'
+	DATA.B $04, $0A, $11, $00, $00, $00, $00, $00  ;  94 '^'
+	DATA.B $00, $00, $00, $00, $00, $00, $1F, $00  ;  95 '_'
+	DATA.B $0C, $0C, $04, $02, $00, $00, $00, $00  ;  96 '`'
+	DATA.B $00, $00, $0C, $02, $0E, $12, $0F, $00  ;  97 'a'
+	DATA.B $10, $10, $16, $19, $11, $19, $16, $00  ;  98 'b'
+	DATA.B $00, $00, $0E, $11, $10, $11, $0E, $00  ;  99 'c'
+	DATA.B $01, $01, $0D, $13, $11, $13, $0D, $00  ; 100 'd'
+	DATA.B $00, $00, $0E, $11, $1F, $10, $0E, $00  ; 101 'e'
+	DATA.B $02, $05, $04, $0E, $04, $04, $04, $00  ; 102 'f'
+	DATA.B $00, $00, $0E, $13, $13, $0D, $01, $0E  ; 103 'g'
+	DATA.B $10, $10, $16, $19, $11, $11, $11, $00  ; 104 'h'
+	DATA.B $04, $00, $0C, $04, $04, $04, $0E, $00  ; 105 'i'
+	DATA.B $02, $00, $02, $02, $02, $12, $0C, $00  ; 106 'j'
+	DATA.B $10, $10, $12, $14, $18, $14, $12, $00  ; 107 'k'
+	DATA.B $0C, $04, $04, $04, $04, $04, $0E, $00  ; 108 'l'
+	DATA.B $00, $00, $1A, $15, $15, $15, $15, $00  ; 109 'm'
+	DATA.B $00, $00, $16, $19, $11, $11, $11, $00  ; 110 'n'
+	DATA.B $00, $00, $0E, $11, $11, $11, $0E, $00  ; 111 'o'
+	DATA.B $00, $00, $16, $19, $19, $16, $10, $10  ; 112 'p'
+	DATA.B $00, $00, $0D, $13, $13, $0D, $01, $01  ; 113 'q'
+	DATA.B $00, $00, $16, $19, $10, $10, $10, $00  ; 114 'r'
+	DATA.B $00, $00, $0F, $10, $0E, $01, $1E, $00  ; 115 's'
+	DATA.B $04, $04, $1F, $04, $04, $05, $02, $00  ; 116 't'
+	DATA.B $00, $00, $11, $11, $11, $13, $0D, $00  ; 117 'u'
+	DATA.B $00, $00, $11, $11, $11, $0A, $04, $00  ; 118 'v'
+	DATA.B $00, $00, $11, $11, $15, $15, $0A, $00  ; 119 'w'
+	DATA.B $00, $00, $11, $0A, $04, $0A, $11, $00  ; 120 'x'
+	DATA.B $00, $00, $11, $11, $0F, $01, $11, $0E  ; 121 'y'
+	DATA.B $00, $00, $1F, $02, $04, $08, $1F, $00  ; 122 'z'
+	DATA.B $02, $04, $04, $08, $04, $04, $02, $00  ; 123 '{'
+	DATA.B $04, $04, $04, $00, $04, $04, $04, $00  ; 124 '|'
+	DATA.B $08, $04, $04, $02, $04, $04, $08, $00  ; 125 '}'
+	DATA.B $08, $15, $02, $00, $00, $00, $00, $00  ; 126 '~'
+	DATA.B $04, $0E, $1B, $11, $11, $1F, $00, $00  ; 127
+; End of font table (1024 bytes, chars 0-127)
+
+;; ============================================================================
+;; Graphics drawing primitives (ST7586S windowed read-modify-write)
+;; ============================================================================
+
+;;
+;; LCD_SETPIXEL — Set a single pixel on the LCD
+;;   Reads GFX_X (0-239) and GFX_Y (0-159)
+;;   Uses windowed read-modify-write for ST7586S
+;;   Preserves: Y (data stack pointer)
+;;   Clobbers: A, X, N, N+1
+;;
+LCD_SETPIXEL:
+		;; byte_col = GFX_X / 2 + COL_OFFSET
+		LDA GFX_X
+		LSR A
+		CLC
+		ADC #COL_OFFSET
+		STA N			; byte_col
+		;; pixel_pos = GFX_X & 1
+		LDA GFX_X
+		AND #$01
+		STA N+1			; 0=left, 1=right
+		;; Set single-byte window
+		LDA #$2A
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA		; col start
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA		; col end = col start
+		LDA #$2B
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA GFX_Y
+		STA LCD_DATA		; row start
+		LDA #$00
+		STA LCD_DATA
+		LDA GFX_Y
+		STA LCD_DATA		; row end = row start
+		;; Read current byte (0x2E + dummy + actual)
+		LDA #$2E
+		STA LCD_CMD
+		LDA LCD_DATA		; dummy read
+		LDA LCD_DATA		; actual byte
+		;; OR in the pixel
+		LDX N+1
+		BNE .SP_R
+		ORA #$C0		; left pixel: set bits 7:6
+		BRA .SP_W
+.SP_R:		ORA #$18		; right pixel: set bits 4:3
+		;; Re-set window and write back
+.SP_W:		PHA
+		LDA #$2A
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA
+		LDA #$2B
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA GFX_Y
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA GFX_Y
+		STA LCD_DATA
+		LDA #$2C
+		STA LCD_CMD
+		PLA
+		STA LCD_DATA
+		RTS
+
+;;
+;; MOVETO ( x y -- ) — set graphics cursor position
+;;
+MOVETO:		DATA.W (MOVETO+2)
+		LDA stack,Y		; y
+		STA GFX_Y
+		LDA stack+2,Y		; x
+		STA GFX_X
+		JMP POPTWO
+
+;;
+;; LINETO ( x y -- ) — draw line from cursor to (x,y), update cursor
+;;   Uses Bresenham's algorithm with fast paths for H and V lines.
+;;   N area: N+0=dx, N+1=abs_dy, N+2=sx, N+3=sy, N+4/5=err(16), N+6=x1, N+7=y1
+;;   W area: W/W+1 used as e2 temporary (safe in code words)
+;;
+LINETO:		DATA.W (LINETO+2)
+		;; Save target coordinates, pop stack
+		LDA stack,Y		; y1
+		STA N+7
+		LDA stack+2,Y		; x1
+		STA N+6
+		INY			; pop two cells
+		INY
+		INY
+		INY
+		;; Check for horizontal line (y0 == y1)
+		LDA N+7
+		CMP GFX_Y
+		BNE .LT_not_h
+		JMP .LT_hline
+.LT_not_h:
+		;; Check for vertical line (x0 == x1)
+		LDA N+6
+		CMP GFX_X
+		BNE .LT_not_v
+		JMP .LT_vline
+.LT_not_v:
+		;; ---- General Bresenham ----
+		;; Compute dx = abs(x1 - x0), sx
+		LDA N+6
+		SEC
+		SBC GFX_X
+		BCC .LT_sx_neg
+		STA N+0			; dx
+		STI #1, N+2		; sx = +1
+		BRA .LT_comp_dy
+.LT_sx_neg:	EOR #$FF
+		CLC
+		ADC #1
+		STA N+0			; dx = abs(x1-x0)
+		STI #$FF, N+2		; sx = -1
+.LT_comp_dy:	;; Compute abs_dy = abs(y1 - y0), sy
+		LDA N+7
+		SEC
+		SBC GFX_Y
+		BCC .LT_sy_neg
+		STA N+1			; abs_dy
+		STI #1, N+3		; sy = +1
+		BRA .LT_comp_err
+.LT_sy_neg:	EOR #$FF
+		CLC
+		ADC #1
+		STA N+1			; abs_dy = abs(y1-y0)
+		STI #$FF, N+3		; sy = -1
+.LT_comp_err:	;; err = dx - abs_dy (16-bit signed)
+		SEC
+		LDA N+0
+		SBC N+1
+		STA N+4			; err_lo
+		LDA #0
+		SBC #0
+		STA N+5			; err_hi
+		;; ---- Bresenham loop ----
+.LT_loop:	JSR LCD_SETPIXEL
+		;; Done check: GFX_X == x1 && GFX_Y == y1
+		LDA GFX_X
+		CMP N+6
+		BNE .LT_step
+		LDA GFX_Y
+		CMP N+7
+		BEQ .LT_done
+.LT_step:	;; e2 = 2 * err, store in W:W+1
+		LDA N+4
+		ASL A
+		STA W			; e2_lo
+		LDA N+5
+		ROL A
+		STA W+1			; e2_hi
+		;; Test: e2 >= -abs_dy (i.e., e2 + abs_dy >= 0)
+		CLC
+		LDA W			; e2_lo
+		ADC N+1			; + abs_dy (unsigned, <=63)
+		LDA W+1			; e2_hi
+		ADC #0			; + carry
+		BMI .LT_skip_x		; negative -> skip X step
+		;; err -= abs_dy
+		SEC
+		LDA N+4
+		SBC N+1
+		STA N+4
+		BCS .LT_no_bx
+		DEC N+5
+.LT_no_bx:	;; x0 += sx
+		LDA GFX_X
+		CLC
+		ADC N+2			; sx (+1 or $FF=-1)
+		STA GFX_X
+.LT_skip_x:	;; Test: e2 <= dx (i.e., dx - e2 >= 0)
+		SEC
+		LDA N+0			; dx_lo
+		SBC W			; - e2_lo
+		LDA #0			; dx_hi = 0
+		SBC W+1			; - e2_hi
+		BMI .LT_skip_y		; negative -> skip Y step
+		;; err += dx
+		CLC
+		LDA N+4
+		ADC N+0
+		STA N+4
+		BCC .LT_no_cy
+		INC N+5
+.LT_no_cy:	;; y0 += sy
+		LDA GFX_Y
+		CLC
+		ADC N+3			; sy (+1 or $FF=-1)
+		STA GFX_Y
+.LT_skip_y:	JMP .LT_loop
+.LT_done:	TIP
+
+		;; ---- Horizontal line (y0 == y1) ----
+.LT_hline:	LDA N+6
+		CMP GFX_X
+		BCS .LT_hright
+.LT_hleft:	JSR LCD_SETPIXEL
+		LDA GFX_X
+		CMP N+6
+		BEQ .LT_hdone
+		DEC GFX_X
+		BRA .LT_hleft
+.LT_hright:	JSR LCD_SETPIXEL
+		LDA GFX_X
+		CMP N+6
+		BEQ .LT_hdone
+		INC GFX_X
+		BRA .LT_hright
+.LT_hdone:	LDA N+6
+		STA GFX_X
+		TIP
+
+		;; ---- Vertical line (x0 == x1) ----
+.LT_vline:	LDA N+7
+		CMP GFX_Y
+		BCS .LT_vdown
+.LT_vup:	JSR LCD_SETPIXEL
+		LDA GFX_Y
+		CMP N+7
+		BEQ .LT_vdone
+		DEC GFX_Y
+		BRA .LT_vup
+.LT_vdown:	JSR LCD_SETPIXEL
+		LDA GFX_Y
+		CMP N+7
+		BEQ .LT_vdone
+		INC GFX_Y
+		BRA .LT_vdown
+.LT_vdone:	LDA N+7
+		STA GFX_Y
+		TIP
+
+;;
+;;    PIXEL ( x y c -- ) — set or clear a single LCD pixel
+;;      x=0-239, y=0-159, c=0 clear / c=1 set
+;;      Uses ST7586S windowed read-modify-write
+;;
+PIXEL:	DATA.W (PIXEL+2)
+		LDA stack,Y		; c
+		STA W			; save c
+		LDA stack+2,Y		; y
+		STA GFX_Y
+		LDA stack+4,Y		; x
+		STA GFX_X
+		INY			; pop 3 cells
+		INY
+		INY
+		INY
+		INY
+		INY
+		;; byte_col = GFX_X / 2 + COL_OFFSET
+		LDA GFX_X
+		LSR A
+		CLC
+		ADC #COL_OFFSET
+		STA N			; byte_col
+		;; pixel_pos = GFX_X & 1
+		LDA GFX_X
+		AND #$01
+		STA N+1			; 0=left, 1=right
+		;; Pixel mask: left=$C0, right=$18
+		LDX N+1
+		BNE .PX_RMASK
+		LDA #$C0
+		BRA .PX_HMASK
+.PX_RMASK:	LDA #$18
+.PX_HMASK:	STA N+2			; pixel mask
+		;; Set single-byte window
+		LDA #$2A
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA
+		LDA #$2B
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA GFX_Y
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA GFX_Y
+		STA LCD_DATA
+		;; Read current byte
+		LDA #$2E
+		STA LCD_CMD
+		LDA LCD_DATA		; dummy
+		LDA LCD_DATA		; actual
+		;; Set or clear
+		LDX W			; check c
+		BNE .PX_SET
+		;; Clear: A = A AND ~mask
+		EOR #$FF
+		ORA N+2
+		EOR #$FF
+		BRA .PX_WR
+.PX_SET:	ORA N+2			; Set: A = A OR mask
+.PX_WR:	PHA
+		;; Re-set window for write
+		LDA #$2A
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA N
+		STA LCD_DATA
+		LDA #$2B
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA GFX_Y
+		STA LCD_DATA
+		LDA #$00
+		STA LCD_DATA
+		LDA GFX_Y
+		STA LCD_DATA
+		LDA #$2C
+		STA LCD_CMD
+		PLA
+		STA LCD_DATA
+		TIP
+
+;;
+;;    FILLRECT ( x y w h c -- ) — fill an LCD rectangle
+;;      x=0-239, y=0-159, w=width, h=height, c=0 clear / c=1 set
+;;      Row-based: processes each pixel row, writes full byte columns.
+;;
+GFXFILL:	DATA.W (GFXFILL+2)
+		;; Pop ( x y w h c -- )
+		LDA stack,Y		; c
+		STA N
+		LDA stack+2,Y		; h
+		STA N+7
+		LDA stack+4,Y		; w
+		STA N+3
+		LDA stack+6,Y		; y
+		STA GFX_Y
+		LDA stack+8,Y		; x
+		STA GFX_X
+		;; Pop 5 cells = 10 bytes
+		INY
+		INY
+		INY
+		INY
+		INY
+		INY
+		INY
+		INY
+		INY
+		INY
+		;; x_end = x + w - 1
+		LDA GFX_X
+		CLC
+		ADC N+3
+		SEC
+		SBC #1
+		STA N+3			; x_end (pixel)
+		;; y_end = y + h - 1
+		LDA GFX_Y
+		CLC
+		ADC N+7
+		SEC
+		SBC #1
+		STA N+4			; y_end
+		;; Fill byte: $D8 (both pixels on) for set, $00 for clear
+		LDA N
+		BEQ .FR_FCLR
+		LDA #$D8
+		BRA .FR_FS
+.FR_FCLR:	LDA #$00
+.FR_FS:		STA N+5			; fill_byte
+		;; byte_col_start = GFX_X / 2 + COL_OFFSET
+		LDA GFX_X
+		LSR A
+		CLC
+		ADC #COL_OFFSET
+		STA N+1			; byte_col_start
+		;; byte_col_end = x_end / 2 + COL_OFFSET
+		LDA N+3
+		LSR A
+		CLC
+		ADC #COL_OFFSET
+		STA N+2			; byte_col_end
+		;; Set window covering the byte columns x row range
+		LDA #$2A
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA N+1
+		STA LCD_DATA		; col start
+		LDA #$00
+		STA LCD_DATA
+		LDA N+2
+		STA LCD_DATA		; col end
+		LDA #$2B
+		STA LCD_CMD
+		LDA #$00
+		STA LCD_DATA
+		LDA GFX_Y
+		STA LCD_DATA		; row start
+		LDA #$00
+		STA LCD_DATA
+		LDA N+4
+		STA LCD_DATA		; row end
+		;; Write fill data
+		LDA #$2C
+		STA LCD_CMD
+		;; Outer: rows (GFX_Y to y_end)
+.FR_RLOOP:	;; Inner: byte columns (N+1 to N+2)
+		LDA N+1
+		STA N+6			; cur_col
+.FR_CLOOP:	LDA N+5			; fill_byte
+		STA LCD_DATA
+		INC N+6
+		LDA N+6
+		CMP N+2
+		BCC .FR_CLOOP
+		BEQ .FR_CLOOP
+		;; Next row
+		INC GFX_Y
+		LDA GFX_Y
+		CMP N+4
+		BCC .FR_RLOOP
+		BEQ .FR_RLOOP
+		TIP
 
 			FILL ($FFE0 - addr), $FF	; pad to vectors
 
@@ -2602,15 +4200,19 @@ JSB6:		DATA.W NMIJMP
 JSB7:		DATA.W NMIJMP
 
 	;; FFF0 - FFFB
+	if CONSOLE_MODE {
+IRQ0:	    DATA.W KBDISR		; PA0 edge detect → keyboard ISR
+	} else {
 IRQ0:	    DATA.W IRQJMP
+	}
 IRQ1:	    DATA.W IRQJMP
 IRQ2:	    DATA.W IRQJMP
 IRQ3:	    DATA.W IRQJMP
 IRQ4:	    DATA.W IRQJMP
 IRQ5:	    DATA.W IRQJMP
 	
-NMI:        DATA.W NMIJMP ; FFFC
-RESET:		DATA.W RESET  ; FFFE
+NMIVEC_:    DATA.W NMIJMP ; FFFC
+RESETVEC:	DATA.W RESET  ; FFFE
 
 	;; ELF entry point for em16 emulator
-	entry := COLD
+	entry := RESET
