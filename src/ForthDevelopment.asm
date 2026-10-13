@@ -18,23 +18,23 @@ START:          data.w KSTART
 	
 UNKNOWN:        data.w $ffff
 				data.w $ffff
-				data.w $0140
-				data.w $17f8
-				data.w $2000
+				data.w $0140			; B/SIDE
+				data.w BUF_FIRST		; FIRST
+				data.w BUF_LIMIT		; LIMIT
+				data.w $0000			; OFFSET
+				data.w $001f			; WIDTH
+				data.w $0000			; WARNING
+				data.w DICT_BASE+$04	; FENCE
+				data.w DICT_BASE+$11	; DP
 				data.w $0000
-				data.w $001f
 				data.w $0000
-				data.w $0404
-				data.w $0411
-				data.w $0000
-				data.w $0000
-				data.w $033c
+				data.w USER_BASE+$3c	; VOC-LINK
 				data.w $a081
-				data.w $0404
+				data.w DICT_BASE+$04
 				data.w $0000
 				data.w $a081
 				data.w _ENDCODE
-				data.w $0336
+				data.w USER_BASE+$36
 				data.w ABORT
 	
 ;;
@@ -1683,7 +1683,7 @@ ERR:         data.w DOCOL
                   data.w BLK
                   data.w AT
 L1684             data.w LIT
-                  data.w $ffae
+                  data.w XKEY
                   data.w CLIT
                   data.b $44
                   data.w STORE
@@ -2083,7 +2083,7 @@ KSTART:			data.w LIT
                   data.w ZBRAN
                   data.w $0022
                   data.w LIT
-                  data.w $037e
+                  data.w USER_BASE+$7e
                   data.w UPAD
                   data.w STORE
                   data.w LIT
@@ -2095,7 +2095,7 @@ KSTART:			data.w LIT
                   data.w LIT
                   data.w _TASK
                   data.w LIT
-                  data.w $0404
+                  data.w DICT_BASE+$04
                   data.w CLIT
                   data.b $0b
                   data.w CMOVE
@@ -2149,7 +2149,7 @@ _MIN             text.7 $83, "MIN"
 ;;
 _MAX             text.7 $83, "MAX"
                   data.w _MIN    ; link to MIN
-                  data.w $fc70    ; PFAPTR
+                  data.w R_FC70    ; PFAPTR
 ;;
 ;;    M*
 ;;
@@ -2827,7 +2827,7 @@ FORGET:         data.w DOCOL
                   data.w TICK
                   data.w NFA
                   data.w DUP
-                  data.w $d1fe
+                  data.w R_D1FE
                   data.w SWAP
                   data.w FENCE
                   data.w AT
@@ -2859,7 +2859,7 @@ FORGET:         data.w DOCOL
                   data.w LFA
                   data.w AT
                   data.w DUP
-                  data.w $d1fe
+                  data.w R_D1FE
                   data.w SWAP
                   data.w R
                   data.w ULESS
@@ -2883,7 +2883,7 @@ FORGET:         data.w DOCOL
                   data.w DPDIV
                   data.w STORE
                   data.w SEMIS
-                  data.w DOCOL
+R_D1FE: 	data.w DOCOL
                   data.w LIT
                   data.w UNKNOWN
                   data.w OVER
@@ -2979,7 +2979,7 @@ DLOOP:         data.w DOCOL
 ;;
 ;;    +LOOP
 ;;
-_PLOOP             text.7 $c5, "+LOOP"
+_PLUSLOOP            text.7 $c5, "+LOOP"
                   data.w _LOOP    ; link to LOOP
                   data.w DPLOOP+2    ; PFAPTR
 ;;
@@ -2990,13 +2990,13 @@ DPLOOP:         data.w DOCOL
                   data.w QPAIRS
                   data.w COMPILE
                   data.w PLOOP
-                  data.w $d214
+                  data.w UNK7
                   data.w SEMIS
 ;;
 ;;    UNTIL
 ;;
 _FUNTIL             text.7 $c5, "UNTIL"
-                  data.w _PLOOP    ; link to +LOOP
+                  data.w _PLUSLOOP    ; link to +LOOP
                   data.w FUNTIL+2    ; PFAPTR
 ;;
 ;;
@@ -3006,7 +3006,7 @@ FUNTIL:         data.w DOCOL
                   data.w QPAIRS
                   data.w COMPILE
                   data.w ZBRAN
-                  data.w $d214
+                  data.w UNK7
                   data.w SEMIS
 ;;
 ;;    END
@@ -3034,7 +3034,7 @@ FAGAIN:         data.w DOCOL
                   data.w QPAIRS
                   data.w COMPILE
                   data.w BRAN
-                  data.w $d214
+                  data.w UNK7
                   data.w SEMIS
 ;;
 ;;    REPEAT
@@ -3066,7 +3066,7 @@ _FIF             text.7 $c2, "IF"
 FIF:         data.w DOCOL
                   data.w COMPILE
                   data.w ZBRAN
-                  data.w $c577
+                  data.w HERE
                   data.w ZERO
                   data.w COMMA
                   data.w TWO
@@ -3085,7 +3085,7 @@ FELSE:         data.w DOCOL
                   data.w QPAIRS
                   data.w COMPILE
                   data.w BRAN
-                  data.w $c577
+                  data.w HERE
                   data.w ZERO
                   data.w COMMA
                   data.w SWAP
@@ -3560,7 +3560,7 @@ CASE:         	data.w DOCOL
     			data.w STORCSP
     			data.w RBRAC
     			data.w LIT
-    			data.w $ff87
+    			data.w R_FF87
     			data.w HERE
     			data.w TWOMINUS
     			data.w STORE
@@ -3651,7 +3651,7 @@ L3640			ROR
 
 	;; Calculate address
 				REP #$20
-				LONGA on
+				longa=on
 
 				LDA 0,x			; Move x to N	
 				LDY #06			; Multiply x by 64
@@ -3680,18 +3680,18 @@ L3666			ASL
 	
 				STX XSAVE
 				REP #$30
-				LONGI on
+				longi=on
 				TAX
 
 				SEP #$20
-				LONGA off
+				longa=off
 	
 				LDA $fd0000,x
 				ORA N+2
 				STA $fd0000,x
 
 				SEP #$30
-				LONGI off
+				longi=off
 				LDX XSAVE
 				JMP POPTWO
 
@@ -3702,7 +3702,11 @@ PCLR:
 ;;    FMTRK
 ;;
 _FMTRK          text.7 $85, "FMTRK"
-    			data.w _PSET           ; link to BANKEXECUTE
+if machine == machine_65C816 {
+    			data.w _PSET           ; link to PSET
+} else {
+    			data.w _BANKEXECUTE    ; link to BANKEXECUTE
+}
     			data.w FMTRK+2         ; PFAPTR
 ;;
 ;;
@@ -3727,124 +3731,124 @@ FMTRK:         	data.w FMTRK+2
     			STA DSK_DATA
     			LDX #$0b
     			LDA #$00
-.L3658 			BIT DSK_CTL
-    			BVS .L3658
+FM3658 			BIT DSK_CTL
+    			BVS FM3658
     			STA DSK_DATA
     			DEX 
-    			BNE .L3658
+    			BNE FM3658
 .L3663 			BIT DSK_CTL
     			BVS .L3663
     			STA DSK_DATA
     			LDX #$02
     			LDA #$f5
-    			BIT DSK_CTL
-    			BVS $d6c2
+R_D6C2: 	BIT DSK_CTL
+    			BVS R_D6C2
     			STA DSK_DATA
     			DEX 
     			BNE $d6c2
-    			BIT DSK_CTL
-    			BVS $d6cd
+R_D6CD: 	BIT DSK_CTL
+    			BVS R_D6CD
     			STA DSK_DATA
     			LDA #$fe
-    			BIT DSK_CTL
-    			BVS $d6d7
+R_D6D7: 	BIT DSK_CTL
+    			BVS R_D6D7
     			STA DSK_DATA
     			LDA N
-    			BIT DSK_CTL
-    			BVS $d6e1
+R_D6E1: 	BIT DSK_CTL
+    			BVS R_D6E1
     			STA DSK_DATA
     			LDA N+2
-    			BIT DSK_CTL
-    			BVS $d6eb
+R_D6EB: 	BIT DSK_CTL
+    			BVS R_D6EB
     			STA DSK_DATA
-    			BIT DSK_CTL
-    			BVS $d6f3
+R_D6F3: 	BIT DSK_CTL
+    			BVS R_D6F3
     			STY DSK_DATA
     			LDA #$01
-    			BIT DSK_CTL
-    			BVS $d6fd
+R_D6FD: 	BIT DSK_CTL
+    			BVS R_D6FD
     			STA DSK_DATA
     			LDA #$f7
-    			BIT DSK_CTL
-    			BVS $d707
+R_D707: 	BIT DSK_CTL
+    			BVS R_D707
     			STA DSK_DATA
     			LDX #$15
     			LDA #$4e
-    			BIT DSK_CTL
-    			BVS $d713
+R_D713: 	BIT DSK_CTL
+    			BVS R_D713
     			STA DSK_DATA
     			DEX 
     			BNE $d713
-    			BIT DSK_CTL
-    			BVS $d71e
+R_D71E: 	BIT DSK_CTL
+    			BVS R_D71E
     			STA DSK_DATA
     			LDX #$0b
     			LDA #$00
-    			BIT DSK_CTL
-    			BVS $d72a
+R_D72A: 	BIT DSK_CTL
+    			BVS R_D72A
     			STA DSK_DATA
     			DEX 
     			BNE $d72a
-    			BIT DSK_CTL
-    			BVS $d735
+R_D735: 	BIT DSK_CTL
+    			BVS R_D735
     			STA DSK_DATA
     			LDX #$02
     			LDA #$f5
-    			BIT DSK_CTL
-    			BVS $d741
+R_D741: 	BIT DSK_CTL
+    			BVS R_D741
     			STA DSK_DATA
     			DEX 
     			BNE $d741
-    			BIT DSK_CTL
-    			BVS $d74c
+R_D74C: 	BIT DSK_CTL
+    			BVS R_D74C
     			STA DSK_DATA
     			LDX #$ff
     			LDA #$fb
-    			BIT DSK_CTL
-    			BVS $d758
+R_D758: 	BIT DSK_CTL
+    			BVS R_D758
     			STA DSK_DATA
     			LDA #$20
-    			BIT DSK_CTL
-    			BVS $d762
+R_D762: 	BIT DSK_CTL
+    			BVS R_D762
     			STA DSK_DATA
     			DEX 
     			BNE $d762
-    			BIT DSK_CTL
-    			BVS $d76d
+R_D76D: 	BIT DSK_CTL
+    			BVS R_D76D
     			STA DSK_DATA
     			LDA #$f7
-    			BIT DSK_CTL
-    			BVS $d777
+R_D777: 	BIT DSK_CTL
+    			BVS R_D777
     			STA DSK_DATA
     			LDX #$35
     			LDA #$4e
-    			BIT DSK_CTL
-    			BVS $d783
+R_D783: 	BIT DSK_CTL
+    			BVS R_D783
     			STA DSK_DATA
     			DEX 
     			BNE $d783
-    			BIT DSK_CTL
-    			BVS $d78e
+R_D78E: 	BIT DSK_CTL
+    			BVS R_D78E
     			STA DSK_DATA
     			INY 
     			CPY #$11
-    			BEQ $d7b2
-    			BIT DSK_CTL
-    			BVS $d79b
+    			BEQ R_D7B2
+R_D79B: 	BIT DSK_CTL
+    			BVS R_D79B
     			STX DSK_DATA
     			LDX #$09
     			LDA #$00
-    			BIT DSK_CTL
-    			BVS $d7a7
+R_D7A7: 	BIT DSK_CTL
+    			BVS R_D7A7
     			STA DSK_DATA
-    			JMP $d6ab
-    			LDY #$4e
-    			BIT DSK_CTL
-    			BVS $d7b4
-    			BPL $d7c1
+    			JMP FM3658
+R_D7B2: 	LDY #$4e
+R_D7B4: 	BIT DSK_CTL
+    			BVS R_D7B4
+    			BPL R_D7C1
     			STY DSK_DATA
     			JMP $d7b4
-    			PLA 
+R_D7C1: 	PLA 
     			TAX 
     			JMP POPTWO
 ;;
@@ -3983,18 +3987,18 @@ L3906:			PHA
     			PLA 
     			PHA 
     			CLC 
-    			ADC $0352
-    			STA $0352
-    			BCC $d8bb
-    			INC $0353
-    			PLA 
+    			ADC USER_BASE+$52
+    			STA USER_BASE+$52
+    			BCC R_D8BB
+    			INC USER_BASE+$53
+R_D8BB: 	PLA 
     			AND #$0f
 L3922:			CLC 
     			ADC #$30
     			CMP #$3a
-    			BCC $d8c7
+    			BCC R_D8C7
     			ADC #$06
-    			JMP $f5ec
+R_D8C7: 	JMP L506
 
 NAMES:    		data.b "M REARDON R DUMSE", $00
 CRIGHT:   		data.b "COPYRIGHT 1983 ROCKWELL "
@@ -4003,7 +4007,7 @@ CRIGHT:   		data.b "COPYRIGHT 1983 ROCKWELL "
 ;;    N
 ;;
 _N 	            text.7 $81, "N"
-    			data.w $0332    ; link to ADMP ToDo:
+    			data.w USER_BASE+$32    ; link to ADMP ToDo:
     			data.w FN+2      ; PFAPTR
 
 FN:        		data.w DOCON
@@ -4140,7 +4144,7 @@ DSETUP:        		data.w DOCON
 	
 UNK1:         		data.b $09, $09, $05, $15, $15, $01, $11, $80
 					data.b $09, $80, $0d, $1d, $19, $80, $80, $80
-    				data.b $80, $00, $04, $14, $14, $80, $80, $80,
+    				data.b $80, $00, $04, $14, $14, $80, $80, $80
 					data.b $80, $80, $0c, $1c, $1c, $80, $80, $2c
 ;;
 ;;    SETMODE - assembler
@@ -4243,7 +4247,7 @@ _DTOP:			text.7 $83, "TOP"
 				data.w DTOP+2
 
 DTOP:			data.w DOCOL	
-    			data.w $d9fa 	; ToDo: UNK4
+    			data.w COMMAX 	; ToDo: UNK4
     			data.w ZERO
     			data.w SEMIS
 ;;
@@ -4254,7 +4258,7 @@ _DSEC            text.7 $83, "SEC"
     			data.w DSEC+2    ; PFAPTR
 
 DSEC:         	data.w DOCOL
-    			data.w $d9fa	; ToDo: UNK4
+    			data.w COMMAX	; ToDo: UNK4
     			data.w TWO
     			data.w SEMIS
 
@@ -4266,7 +4270,7 @@ _RP:         	text.7 $83, "RP)"
                 data.w RP+2
 
 RP:				data.w DOCOL
-    			data.w $d9fa	; ToDo: UNK4
+    			data.w COMMAX	; ToDo: UNK4
 				data.w LIT
     			data.w $01
     			data.w SEMIS
@@ -4303,7 +4307,7 @@ UNK9:         	data.w DOCOL
     			data.w DUP
     			data.w PLUS
     			data.w LOOP
-    			data.w NMI
+    			data.w $fffa		; branch offset
     			data.w OVER
     			data.w ONEPLUS
     			data.w AT
@@ -4316,7 +4320,7 @@ IMPLIED		    data.w CAT
                 data.w MEM
     			data.w SEMIS
 	
-    			data.w DUP
+IMPLIED2:		data.w DUP
     			data.w ONEPLUS
     			data.w CAT
     			data.w CLIT
@@ -4644,7 +4648,7 @@ _ADCC:		text.7 $84, "ADC,"
 			data.w ADCC+2
 
 ADCC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $60, $6e, $1c
 
 ;;
@@ -4655,7 +4659,7 @@ _ANDC:		text.7 $84, "AND,"
 			data.w ANDC+2
 
 ANDC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $20, $6e, $1c
 
 ;;
@@ -4666,7 +4670,7 @@ _CMPC:		text.7 $84, "CMP,"
 			data.w CMPC+2
 
 CMPC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $c0, $6e, $1c
 
 	;;
@@ -4677,7 +4681,7 @@ _EORC:		text.7 $84, "EOR,"
 			data.w EORC+2
 
 EORC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $40, $6e, $1c
 
 	;;
@@ -4688,7 +4692,7 @@ _LDAC:		text.7 $84, "LDA,"
 			data.w LDAC+2
 
 LDAC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $a0, $6e, $1c
 
 	;;
@@ -4699,7 +4703,7 @@ _ORAC:		text.7 $84, "ORA,"
 			data.w ORAC+2
 
 ORAC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $00, $6e, $1c
 
 	;;
@@ -4710,7 +4714,7 @@ _SBCC:		text.7 $84, "SBC,"
 			data.w SBCC+2
 
 SBCC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $e0, $6e, $1c
 
 	;;
@@ -4721,7 +4725,7 @@ _STAC:		text.7 $84, "STA,"
 			data.w STAC+2
 
 STAC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $80, $6c, $1c
 
 	;;
@@ -4732,7 +4736,7 @@ _ASLC:		text.7 $84, "ASL,"
 			data.w ASLC+2
 
 ASLC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $01, $0d, $0d
 
 	;;
@@ -4743,7 +4747,7 @@ _DECC:		text.7 $84, "DEC,"
 			data.w DECC+2
 
 DECC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $c1, $0c, $0c
 
 	;;
@@ -4754,7 +4758,7 @@ _INCC:		text.7 $84, "INC,"
 			data.w INCC+2
 
 INCC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $e1, $0c, $0c
 
 	;;
@@ -4765,7 +4769,7 @@ _LSRC:		text.7 $84, "LSR,"
 			data.w LSRC+2
 
 LSRC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $41, $0d, $0d
 
 	;;
@@ -4776,7 +4780,7 @@ _ROLC:		text.7 $84, "ROL,"
 			data.w ROLC+2
 
 ROLC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $21, $0d, $0d
 
 	;;
@@ -4787,7 +4791,7 @@ _RORC:		text.7 $84, "ROR,"
 			data.w RORC+2
 
 RORC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $61, $0d, $0d
 
 	;;
@@ -4798,7 +4802,7 @@ _STXC:		text.7 $84, "STX,"
 			data.w STXC+2
 
 STXC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $81, $14, $04
 
 	;;
@@ -4809,7 +4813,7 @@ _CPXC:		text.7 $84, "CPX,"
 			data.w CPXC+2
 
 CPXC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $e0, $86, $04
 
 	;;
@@ -4820,7 +4824,7 @@ _CPYC:		text.7 $84, "CPY,"
 			data.w CPYC+2
 
 CPYC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $c0, $86, $04
 
 	;;
@@ -4831,7 +4835,7 @@ _LDXC:		text.7 $84, "LDX,"
 			data.w LDXC+2
 
 LDXC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $a2, $96, $14
 
 	;;
@@ -4842,7 +4846,7 @@ _LDYC:		text.7 $84, "LDY,"
 			data.w LDYC+2
 
 LDYC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $a0, $8e, $0c
 
 	;;
@@ -4853,7 +4857,7 @@ _STYC:		text.7 $84, "STY,"
 			data.w STYC+2
 
 STYC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $80, $8c, $04
 
 	;;
@@ -4864,7 +4868,7 @@ _JSRC:		text.7 $84, "JSR,"
 			data.w JSRC+2
 
 JSRC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $14, $80, $04
 
 	;;
@@ -4875,7 +4879,7 @@ _JMPC:		text.7 $84, "JMP,"
 			data.w JMPC+2
 
 JMPC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $40, $80, $84
 
 	;;
@@ -4886,7 +4890,7 @@ _BITC:		text.7 $84, "BIT,"
 			data.w BITC+2
 
 BITC:		data.w DOES
-			data.w $daad
+			data.w IMPLIED2
 			data.b $20, $84, $04
 
 ;;
@@ -5138,7 +5142,7 @@ ELSEC:          data.w DOCOL
 ;;
 ;;    NOT
 ;;
-_NOT            text.7 $83, "NOT"
+_NOTC           text.7 $83, "NOT"
     			data.w _ELSEC    ; link to ELSE,
     			data.w NOT+2     ; PFAPTR
 
@@ -5150,7 +5154,7 @@ NOT:         	data.w DOCOL
 ;;    CS
 ;;
 _CS             text.7 $82, "CS"
-    			data.w _NOT    ; link to NOT
+    			data.w _NOTC    ; link to NOT
     			data.w CS+2    ; PFAPTR
 
 CS:         	data.w DOCON
@@ -5167,17 +5171,17 @@ VS:         	data.w DOCON
 ;;
 ;;    0=
 ;;
-_ZEQ            text.7 $82, "0="
+_ZEQC           text.7 $82, "0="
     			data.w _VS    ; link to VS
-    			data.w ZEQ+2    ; PFAPTR
+    			data.w ZEQC+2    ; PFAPTR
 
-ZEQ:         	data.w DOCON
+ZEQC:         	data.w DOCON
     			data.w $00d0
 ;;
 ;;    0<
 ;;
 _ZLESS          text.7 $82, "0<"
-    			data.w _ZEQ    ; link to 0=
+    			data.w _ZEQC    ; link to 0=
     			data.w ZLESS+2    ; PFAPTR
 
 ZLESS:         	data.w DOCON

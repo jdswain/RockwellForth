@@ -34,6 +34,9 @@ src/ForthKernel
 src/ForthKernel-L28
 src/ForthKernel-L28-console
 src/ForthDevelopment-L28
+src/ForthDevelopment-T20K
+src/ForthDevelopment-65C02
+src/ForthDevelopment-R6501Q
 
 # Backup files
 *.dtc-backup

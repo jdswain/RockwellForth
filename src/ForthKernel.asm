@@ -47,6 +47,10 @@
 	;; 65C816 emulator with emulated 6551
 	machine_65C816 = "65C816"
 
+	;; Tang Nano 20K FPGA board: 65C816 in native mode, 6551 at $0200, text
+	;; display and ADB keyboard. See ForthConsole-T20K.asm.
+	machine_T20K = "T20K"
+
 	;; 	machine := machine_65C816
 	if machine {
 	  message "Assembling for ", machine
@@ -55,6 +59,7 @@
 	  message "   -Dmachine=\"R6501Q\""
 	  message "   -Dmachine=\"65C02\""
 	  message "   -Dmachine=\"65C816\""
+	  message "   -Dmachine=\"T20K\""
 	}
 	
 	if machine == machine_R6501Q {
@@ -64,11 +69,40 @@
 	} else if machine == machine_65C02 {
         cpu := "R65C02"
 	    stack_base := $0100
-	    start_offset := $400-$14+$0a
+	    start_offset := $40d			; pads the kernel so the vectors land at $FFFA
 	} else if machine == machine_65C816 {
         cpu := "65C816"
 	    stack_base := $0100
 	    start_offset := $400-$14+$0a-$0b-$09+$1d ; Space for extra vectors
+	} else if machine == machine_T20K {
+        cpu := "65C816"
+	    stack_base := $0100
+	    start_offset := $1034			; pads the kernel so the vectors land at $FFFA
+	}
+
+* Memory layout
+
+	;; The original keeps its user variables and terminal input buffer in
+	;; page 3 and starts the dictionary at $0400. On the Tang Nano 20K
+	;; $0200-$0FFF is the I/O block, so everything moves above it, and with
+	;; 8 MB of RAM behind it the dictionary gets the whole of $1100-$B7F7.
+	;;
+	;; native: the processor is a 65C816 in native mode. Direct page indexing
+	;; does not wrap there, and TXS with an 8 bit X clears the high byte of S.
+	if machine == machine_T20K {
+	    native := 1
+	    USER_BASE := $1000			; user variables, TIB at +$80
+	    DICT_BASE := $1100			; RAM dictionary
+	    BUF_FIRST := $b7f8			; disk buffers (two of $404 bytes)
+	    BUF_LIMIT := $c000
+	    ROM_SCAN := $c0				; page the search for a ROM starts at
+	} else {
+	    native := 0
+	    USER_BASE := $0300
+	    DICT_BASE := $0400
+	    BUF_FIRST := $17f8
+	    BUF_LIMIT := $2000
+	    ROM_SCAN := $04
 	}
 
 * R6501Q Hardware Registers 	
@@ -131,18 +165,18 @@
 	
 	;; Page 3 RAM usage - User variables
 	
-    	TIBX := $0300			; Terminal Input Buffer address
+    	TIBX := USER_BASE		; Terminal Input Buffer address
         RO := TIBX+2				; Return stack base address
         SO := RO+2				; Parameter stack base address
         UC_L := SO+2			; Number of characters per line
-        UPAD := UC_L+2			; Location of PAD in memory
-        UR_W := UPAD+2			; CFA of UR/W orphan word
-        BASE := UR_W+2			; Current I/O base number
-        CLD_WARM := BASE+2		; Cold/Warm reset flag
-        IN := CLD_WARM+2		; Byte offset in current input stream
-        DPL := IN+2				; Number of decimals in double precision input
-        HLD := DPL+2			; Address of current output
-        DISKNO := HLD+2			; Number of selected disk drive
+        UV_PAD := UC_L+2			; Location of PAD in memory
+        UR_W := UV_PAD+2			; CFA of UR/W orphan word
+        UV_BASE := UR_W+2			; Current I/O base number
+        CLD_WARM := UV_BASE+2		; Cold/Warm reset flag
+        UV_IN := CLD_WARM+2		; Byte offset in current input stream
+        UV_DPL := UV_IN+2				; Number of decimals in double precision input
+        UV_HLD := UV_DPL+2			; Address of current output
+        DISKNO := UV_HLD+2			; Number of selected disk drive
         CYLINDER := DISKNO+2	; Track of each disk
         B_SIDE := CYLINDER+4	; Blocks per side per disk
 
@@ -153,22 +187,46 @@
 	Disk controller registers. For the R6501Q the disk registers must be available
 	at both $E000 and $E100. This should be fixed.
 *)
+	if machine == machine_T20K {
+	;; There is no disk controller yet. These point at eight zero bytes at
+	;; the start of the ROM so that anything polling the status sees "idle"
+	;; and returns, rather than hanging on whatever happens to be there.
+    	DSK_STATUS := $e000
+        DSK_TRACK := $e001
+        DSK_SECTOR := $e002
+        DSK_DATA := $e003
+        DSK_CTL := $e006
+	} else {
     	DSK_STATUS := $e000
         DSK_TRACK := $e101
         DSK_SECTOR := $e102
         DSK_DATA := $e103
         DSK_CTL := $e106
+	}
 
 (*
 	This is a 4k ROM starting at $F400, but the first $400 bytes are not used
 *)
 
+	if machine == machine_T20K {
+	;; An 8k ROM: the console driver sits in front of the kernel proper.
+    		ORG := $e000
+			FILL.B 8, 0			; stand-in disk registers, see above
+			Include "ForthConsole-T20K.asm"
+ 			FILL.B start_offset, $ff
+	} else {
     		ORG := $f000
  			FILL.B start_offset, $ff
+	}
 
 ;; Data table of initial values for registers, used by INIT 
-INITTAB:    DATA.B $80, $03, $c2, $00, $ff, $00, $50, $00,
-			DATA.B $7e, $03, $08, $fd, $0a, $00
+INITTAB:    DATA.W USER_BASE+$80		; TIB
+			DATA.W $00c2				; S0
+			DATA.W $00ff				; R0
+			DATA.W $0050				; C/L
+			DATA.W USER_BASE+$7e		; UPAD
+			DATA.W DISK					; UR/W
+			DATA.W $000a				; BASE
 ;;
 ;;    LIT
 ;;
@@ -270,11 +328,21 @@ BRAN:		DATA.W BRAN+4		; CLC is start of BRANCH,
 ;;    0BRANCH
 ;;
 ZBRAN:      DATA.W ZBRAN+2
+	if native {
+    		LDA 0,X				; $fe,X does not wrap in native mode
+    		ORA 1,X
+    		PHP
+    		INX 
+    		INX 
+    		PLP
+    		BEQ BRAN+4
+	} else {
     		INX 
     		INX 
     		LDA $fe,X
     		ORA $ff,X
     		BEQ BRAN+4
+	}
 ;; 
 BUMP   		CLC 
     		LDA IP
@@ -303,13 +371,29 @@ L316   		BPL BRAN+2
     		INX 
     		INX 
     		INX 
+	if native {
+    		LDA #>stack_base	; TXS would clear the high byte of S
+    		XBA
+    		TXA
+    		TCS
+	} else {
     		TXS 
+	}
     		LDX XSAVE
     		BVC BUMP
 ;;
 ;;    (LOOP) - this is different to FIG-Forth
 ;;
 PLOOP:      DATA.W PLOOP+2
+	if native {
+    		LDA 1,X				; $ff,X does not wrap in native mode
+    		PHA 
+    		PHA 
+    		LDA 0,X
+    		INX 
+    		INX 
+    		STX XSAVE
+	} else {
     		INX 
     		INX 
     		STX XSAVE
@@ -317,6 +401,7 @@ PLOOP:      DATA.W PLOOP+2
     		PHA 
     		PHA 
     		LDA $fe,X
+	}
     		TSX 
     		INX 
     		INX 
@@ -488,10 +573,14 @@ EMIT:       DATA.W EMIT+2
 L504   		JSR L506
     		JMP POP
 L506   		JMP (UEMIT)
+	if machine == machine_T20K {
+XEMIT  		JMP CON_EMIT		; serial port and display
+	} else {
 XEMIT  		BIT SCSR
     		BVC XEMIT
     		STA SRDR
     		RTS 
+	}
 ;;
 ;;    KEY
 ;;
@@ -499,17 +588,26 @@ KEY:        DATA.W KEY+2
     		JSR L517
     		JMP PUSH0A
 L517   		JMP (UKEY)
+	if machine == machine_T20K {
+L518   		JMP CON_KEY			; serial port or keyboard
+	} else {
 L518   		LDA SCSR
     		AND #1
     		BEQ L518
     		LDA SRDR
     		RTS 
+	}
 ;;
 ;;    ?TERMINAL
 ;;
 QTERM:      DATA.W QTERM+2
+	if machine == machine_T20K {
+    		LDA ser_status		; serial port only
+    		AND #$08
+	} else {
     		LDA SCSR
     		AND #1
+	}
     		JMP PUSH0A
 ;;
 ;;    CR
@@ -667,8 +765,15 @@ RPSTO:      DATA.W RPSTO+2
     		STX XSAVE
     		LDY #$04
     		LDA (UP),Y
+	if native {
+    		XBA
+    		LDA #>stack_base	; TXS would clear the high byte of S
+    		XBA
+    		TCS
+	} else {
     		TAX 
     		TXS 
+	}
     		LDX XSAVE
     		JMP NEXT
 ;;
@@ -1472,7 +1577,6 @@ L1485  		LDX #$ff
     		TXS 
     		CLD 
     		CLC
-			XCE
     		LDA #0
     		STA MCR				; Full address mode
     		LDA #0
@@ -1487,11 +1591,36 @@ L1485  		LDX #$ff
     		STA SCSR
     STA INTFLAG
 
+	} else if machine == machine_65C02 {
+
+	;; Runs as-is on a 65C816 left in emulation mode.
+L1485  		LDX #$ff
+    		TXS 
+    		CLD 
+    		LDA #0
+    		STA INTFLAG
+
 	} else if machine == machine_65C816 {
 
 L1485		CLC
 			XCE
 	;; ToDo: set up serial, interrupts, display etc.
+
+	} else if machine == machine_T20K {
+
+L1485		SEI
+    		CLD 
+    		CLC
+			XCE					; native mode; A, X and Y stay 8 bit
+			REP #$10
+			longi=on
+			LDX #stack_base+$ff
+			TXS
+			SEP #$30
+			longi=off
+    		LDA #0
+    		STA INTFLAG
+			JSR CON_INIT		; serial port, text display, keyboard
 	}
     		LDA #$6c
     		STA W-1
@@ -1503,9 +1632,9 @@ L1485		CLC
     		STA UKEY
     		LDA #>XKEY
     		STA UKEY+1
-    		LDA #0
+    		LDA #<USER_BASE
     		STA UP
-    		LDA #3
+    		LDA #>USER_BASE
     		STA UP+1
     		LDY #5
     		JSR L1549
@@ -1531,7 +1660,7 @@ L1515  		LDA #>DSKBOOT
     		STA IP
     		CLI 
     		LDX #$c2		 	; X is parameter (data) stack
-    		LDA #$04			; Load $0400 into TOS to start ROM search
+    		LDA #ROM_SCAN		; Load $0400 into TOS to start ROM search
     		STA TOS+1
     		LDY #0
     		STY TOS
@@ -1648,7 +1777,7 @@ MIN:        DATA.W DOCOL
 ;;    MAX
 ;; 
 MAX:	    DATA.W DOCOL
-    		DATA.W TWODUP
+R_FC70: 	DATA.W TWODUP
     		DATA.W LESS
     		DATA.W ZBRAN
     		DATA.W $0004
@@ -1848,8 +1977,8 @@ DSTAT:		STA DSK_STATUS
 ;;
 ;;
 DWRITE:     DATA.W DWRITE+2
-    		JSR $fd74
-L1853  		JSR $fd7f
+    		JSR CALCSEC
+L1853  		JSR DRSETUP
     		LDA #$b0
     		JSR DSTAT
     		JSR L1862
@@ -1920,7 +2049,7 @@ SPACES:     DATA.W DOCOL
     		DATA.W DO
     		DATA.W SPACE
     		DATA.W LOOP
-    		DATA.W RESET
+    		DATA.W $fffc		; branch offset
     		DATA.W SEMIS
 ;;
 ;;
@@ -2154,17 +2283,49 @@ BANKPOP:    DATA.W BANKPOP+2
 ;;
 ;;
 ;;
+	if machine == machine_T20K {
+	;; The bank here is the top byte of a 24 bit address, reached with long
+	;; indirect addressing rather than by switching anything.
+	;;
+	;; BANKC! ( b addr bank -- )
+BANKCSTOR:  DATA.W BANKCSTOR+2
+    		JSR BANKPTR
+    		LDA 4,X
+    		STA [N]
+    		INX
+    		INX
+    		JMP POPTWO
+	;; Copies addr and bank from the stack into the 24 bit pointer at N.
+BANKPTR:	LDA 0,X
+    		STA N+2
+    		LDA 2,X
+    		STA N
+    		LDA 3,X
+    		STA N+1
+    		RTS
+	} else {
 BANKCSTOR:  DATA.W DOCOL
     		DATA.W BANKPSH
     		DATA.W CSTOR
     		DATA.W BANKPOP
+	}
 ;;
 ;;
 ;;
+	if machine == machine_T20K {
+	;; BANKC@ ( addr bank -- b )
+BANKCAT:    DATA.W BANKCAT+2
+    		JSR BANKPTR
+    		LDA [N]
+    		STA 2,X
+    		STY 3,X
+    		JMP POP
+	} else {
 BANKCAT:    DATA.W DOCOL
     		DATA.W BANKPSH
     		DATA.W CAT
     		DATA.W BANKPOP
+	}
 ;;
 ;;
 ;;
@@ -2200,7 +2361,7 @@ unkn6:      DATA.W $005d
 
 NMIJMP		JMP ($0042)
 IRQJMP		JMP ($0040)
-    		DATA.W OVER
+R_FF87: 	DATA.W OVER
 			DATA.W PLUS
 			DATA.W PLUS
 			DATA.W AT
@@ -2264,7 +2425,7 @@ MMON:       DATA.W DOCOL
     		DATA.W BRAN
     		DATA.W $ffd6
 
-	if machine == machine_65C816 {
+	if cpu == "65C816" {
 
 N_COP:		DATA.W COLD+5
 N_BRK:		DATA.W COLD+5
@@ -2287,3 +2448,6 @@ NMI:     	DATA.W NMIJMP
 RESET:   	DATA.W COLD+5
 IRQ:	    DATA.W IRQJMP
 	}
+
+	errorif NMI != $fffa, "vectors are not at $FFFA: adjust start_offset"
+
