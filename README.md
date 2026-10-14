@@ -71,7 +71,7 @@ The board is the 65C816 system-on-chip in the Verilog65C816 repository. Its
 Makefile builds the Forth and the bitstream that contains it:
 
     cd ../Verilog65C816/fpga
-    make forth          # assemble, and lay the ROM image out as rom/forth.hex
+    make forth          # assemble the ROM image, rom/forth.mem
     make forth-bit      # build the bitstream
     make prog           # load it into the FPGA (lost at power-off)
 
