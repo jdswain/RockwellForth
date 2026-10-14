@@ -3705,7 +3705,11 @@ _FMTRK          text.7 $85, "FMTRK"
 if machine == machine_65C816 {
     			data.w _PSET           ; link to PSET
 } else {
+if machine == machine_T20K {
+    			data.w _BANKAT         ; link to BANK@, in the kernel ROM
+} else {
     			data.w _BANKEXECUTE    ; link to BANKEXECUTE
+}
 }
     			data.w FMTRK+2         ; PFAPTR
 ;;
@@ -5216,3 +5220,26 @@ TASK:         	data.w DOCOL
 PADDINGD:       data.b $ff, $ff
                 data.b $ff
 
+if machine == machine_T20K {
+;;
+;;	Headers of the words the T20K kernel adds. The development ROM is full,
+;;	so they go in the space the kernel leaves in its own ROM.
+;;
+	section "extension"
+
+    org := EXT_BASE
+;;
+;;    BANK!
+;;
+_BANKSTOR       text.7 $85, "BANK!"
+    			data.w _BANKEXECUTE    ; link to BANKEXECUTE
+    			data.w BANKSTOR+2    ; PFAPTR
+;;
+;;    BANK@
+;;
+_BANKAT         text.7 $85, "BANK@"
+    			data.w _BANKSTOR    ; link to BANK!
+    			data.w BANKAT+2    ; PFAPTR
+
+	errorif org > EXT_BASE+ext_size, "extension headers overflow: raise ext_size"
+}

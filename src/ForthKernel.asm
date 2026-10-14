@@ -77,7 +77,8 @@
 	} else if machine == machine_T20K {
         cpu := "65C816"
 	    stack_base := $0100
-	    start_offset := $1034			; pads the kernel so the vectors land at $FFFA
+	    start_offset := $1026			; pads the kernel so the vectors land at $FFFA
+	    ext_size := $100				; of that, kept for more dictionary headers
 	}
 
 * Memory layout
@@ -213,7 +214,11 @@
     		ORG := $e000
 			FILL.B 8, 0			; stand-in disk registers, see above
 			Include "ForthConsole-T20K.asm"
- 			FILL.B start_offset, $ff
+	;; Room for dictionary headers that do not fit in the development ROM,
+	;; which is full. ForthDevelopment.asm fills it.
+EXT_BASE:
+    		ORG := EXT_BASE+ext_size
+ 			FILL.B start_offset-ext_size, $ff
 	} else {
     		ORG := $f000
  			FILL.B start_offset, $ff
@@ -231,12 +236,24 @@ INITTAB:    DATA.W USER_BASE+$80		; TIB
 ;;    LIT
 ;;
 LIT:		DATA.W LIT+2
+	if native {
+    		REP #$30
+    		LDY IP
+    		LDA $0000,Y
+    		DEX 
+    		DEX 
+    		STA 0,X
+    		INY 
+    		INY 
+    		JMP NEXTY
+	} else {
   			LDA (IP),Y
     		PHA 
     		INC IP
     		BNE L30
     		INC IP+1
 L30    		LDA (IP),Y
+	}
 L31    		INC IP
     		BNE PUSH
     		INC IP+1
@@ -253,6 +270,25 @@ PUT_: 		STA 1,X
 ;
 NEXT: 		BIT INTFLAG			; Check if INTFLAG is set
     		BMI HANDLEINT
+	if native {
+	;; The 65C816 moves the code field address and steps IP as words, with
+	;; IP in a 16 bit Y while it does. The registers are 8 bits again, and
+	;; Y is 0, before the word runs. X keeps the data stack pointer through
+	;; the change of width, its high byte being 0.
+	;;
+	;; NEXTY is the entry for the words below that already have 16 bit
+	;; registers and the new IP in Y, which saves storing IP and loading it
+	;; again. They skip the interrupt test, which the next word makes.
+NOINT  		REP #$30
+    		LDY IP
+NEXTY  		LDA $0000,Y			; Fetch code field address pointed
+    		STA W				; to by IP.
+    		INY 				; Increment IP by two.
+    		INY 
+    		STY IP
+    		SEP #$30
+    		LDY #0
+	} else {
 NOINT  		LDY #$01
     		LDA (IP),Y			; Fetch code field address pointed
     		STA W+1				; to by IP.
@@ -265,6 +301,7 @@ NOINT  		LDY #$01
     		STA IP
     		BCC L54
     		INC IP+1
+	}
 L54    		JMP W-1				; Jump to an indirect jump (W) which
 ;                                 vectors to code pointed to by a code
 ;                                 field. 
@@ -314,6 +351,13 @@ EXECUTE:    DATA.W EXECUTE+2
 BRAN:		DATA.W BRAN+4		; CLC is start of BRANCH, 
    			LDX XSAVE			; Restore X is used internally
    			CLC 
+	if native {
+    		REP #$30
+    		LDA (IP)
+    		ADC IP
+    		TAY 
+    		JMP NEXTY
+	} else {
     		LDA (IP),Y
     		ADC IP
     		PHA 
@@ -324,6 +368,7 @@ BRAN:		DATA.W BRAN+4		; CLC is start of BRANCH,
     		PLA 
     		STA IP
     		JMP NEXT
+	}
 ;;
 ;;    0BRANCH
 ;;
@@ -789,11 +834,17 @@ PUSHS:      DATA.W PUSHS+2
 ;;
 ;;
 SEMIS:      DATA.W SEMIS+2
+	if native {
+    		REP #$30
+    		PLY 
+    		JMP NEXTY
+	} else {
  			PLA 
     		STA IP
     		PLA 
     		STA IP+1
     		JMP NEXT
+	}
 ;;
 ;;
 ;;
@@ -1041,6 +1092,15 @@ CSTOR:      DATA.W CSTOR+2
 ;;
 ;;
 ;; 
+	if native {
+DOCOL:      REP #$30
+    		LDA IP
+    		PHA 
+    		LDY W
+    		INY 
+    		INY 
+    		JMP NEXTY
+	} else {
 DOCOL:      LDA IP+1
     		PHA 
     		LDA IP
@@ -1053,6 +1113,7 @@ DOCOL:      LDA IP+1
     		ADC W+1
     		STA IP+1
     		JMP NEXT
+	}
 ;;
 ;;
 ;; 
@@ -2295,6 +2356,24 @@ BANKCSTOR:  DATA.W BANKCSTOR+2
     		INX
     		INX
     		JMP POPTWO
+	;; BANK! ( n addr bank -- )
+BANKSTOR:   DATA.W BANKSTOR+2
+    		JSR BANKPTR
+    		REP #$20
+    		LDA 4,X
+    		STA [N]
+    		SEP #$20
+    		INX
+    		INX
+    		JMP POPTWO
+	;; BANK@ ( addr bank -- n )
+BANKAT:     DATA.W BANKAT+2
+    		JSR BANKPTR
+    		REP #$20
+    		LDA [N]
+    		STA 2,X
+    		SEP #$20
+    		JMP POP
 	;; Copies addr and bank from the stack into the 24 bit pointer at N.
 BANKPTR:	LDA 0,X
     		STA N+2

@@ -104,7 +104,7 @@ CR. Words are upper case.
 | `$1100`-`$B7F7` | Dictionary |
 | `$B7F8`-`$BFFF` | Two disk buffers |
 | `$C000`-`$DFFF` | Development ROM |
-| `$E000`-`$FFFF` | Console driver and kernel, with about 4 KB free |
+| `$E000`-`$FFFF` | Console driver, extra dictionary headers and kernel, with about 4 KB free |
 
 The original keeps its user variables in page 3 and starts the dictionary at
 `$0400`. Both had to move because that is the board's I/O block. The addresses
@@ -114,20 +114,41 @@ of `ForthKernel.asm`.
 ### Reaching memory above 64 KB
 
 The board has 8 MB of RAM and the display is at `$70_0000`, but Forth addresses
-are 16 bits. Two words take a bank number as well:
+are 16 bits. Four words take a bank number as well:
 
+    BANK@   ( addr bank -- n )
+    BANK!   ( n addr bank -- )
     BANKC@  ( addr bank -- b )
     BANKC!  ( b addr bank -- )
 
     HEX 41 0 70 BANKC!      puts an A in the top left corner of the screen
+    HEX 4241 0 70 BANK!     puts AB there
+
+`BANK@` and `BANK!` are new, for this target only. The development ROM is
+full, so their dictionary headers are in the kernel's ROM, in a section called
+`extension` that `ForthDevelopment.asm` fills. `ext_size` in `ForthKernel.asm`
+is the room kept for it.
 
 On the Rockwell parts these words switch a bank latch. Here the bank is the top
 byte of a 24-bit address.
 
 ### How it differs from the 6502 versions
 
-The processor runs in native mode with 8-bit registers, so the kernel is still
-6502 code. Native mode differs from a 6502 in two ways that mattered:
+The processor runs in native mode with 8-bit registers, so most of the kernel
+is still 6502 code. The inner interpreter is not: `NEXT`, `DOCOL`, `;S`, `LIT`
+and `BRANCH` switch to 16-bit registers, hold `IP` in Y while they move the
+code field address and step `IP` as words, and switch back before the next
+word runs, with Y at 0 as the 6502 code expects. `DOCOL`, `;S`, `LIT` and
+`BRANCH` hand the new `IP` to `NEXT` in Y (at `NEXTY`) rather than storing it
+and having `NEXT` load it again. That entry is after the interrupt test, so
+an interrupt waits one word longer after those.
+
+On this board the time goes on memory accesses, not instructions, and saving
+those is what counts: a loop of a colon word, a literal and `DROP` runs 11%
+faster than with the 6502 interpreter. Doing the same moves as words but
+keeping `IP` in memory throughout gained less than 1%.
+
+Native mode differs from a 6502 in two ways that mattered:
 
 * Direct page indexing does not wrap at the end of the page. `0BRANCH` and
   `(+LOOP)` read the stack with `$FE,X` after dropping an item, which relies on
@@ -136,7 +157,7 @@ The processor runs in native mode with 8-bit registers, so the kernel is still
   which would move the return stack into page zero. `(LOOP)`, `RP!` and the
   cold start set the stack pointer.
 
-Those five places are assembled differently when `native` is set.
+All of these are assembled differently when `native` is set.
 
 ### Not done yet
 
@@ -146,10 +167,11 @@ Those five places are assembled differently when `native` is set.
 * **`?TERMINAL`** looks at the serial port only, not the keyboard.
 * **The Control-R check at start-up** (which forces a cold start) still reads
   the R6501 serial data register at `$17`. On this board that is ordinary RAM.
-* **No 16-bit `BANK@` and `BANK!`**, and `BANKEXECUTE` and `BANKEEC!` do
-  nothing.
-* **The interpreter is not optimised for the 65C816.** `NEXT` and the
+* **`BANKEXECUTE` and `BANKEEC!`** do nothing.
+* **Only the inner interpreter uses 16-bit operations.** The stack and
   arithmetic words still work a byte at a time.
+* **Interrupts are untested.** Nothing on the board raises one, and a handler
+  would have to allow for being entered with 16-bit registers.
 * **The ADB keyboard is untested on hardware.** It works against a model in
   simulation.
 * The words for the R6501's own ports and timers (`PA`, `PB`, `MCR`, `IFR` and
