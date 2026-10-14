@@ -5,7 +5,11 @@
 	message org
 	section "development"
 	
+if t20k {
+    org := FORTH_BASE
+} else {
     org := $c000
+}
 
 ;;
 ;;	The kernel searches for this identifier on every 1k boundary.
@@ -3705,7 +3709,7 @@ _FMTRK          text.7 $85, "FMTRK"
 if machine == machine_65C816 {
     			data.w _PSET           ; link to PSET
 } else {
-if machine == machine_T20K {
+if t20k {
     			data.w _BANKAT         ; link to BANK@, in the kernel ROM
 } else {
     			data.w _BANKEXECUTE    ; link to BANKEXECUTE
@@ -3749,7 +3753,7 @@ R_D6C2: 	BIT DSK_CTL
     			BVS R_D6C2
     			STA DSK_DATA
     			DEX 
-    			BNE $d6c2
+    			BNE R_D6C2
 R_D6CD: 	BIT DSK_CTL
     			BVS R_D6CD
     			STA DSK_DATA
@@ -3782,7 +3786,7 @@ R_D713: 	BIT DSK_CTL
     			BVS R_D713
     			STA DSK_DATA
     			DEX 
-    			BNE $d713
+    			BNE R_D713
 R_D71E: 	BIT DSK_CTL
     			BVS R_D71E
     			STA DSK_DATA
@@ -3792,7 +3796,7 @@ R_D72A: 	BIT DSK_CTL
     			BVS R_D72A
     			STA DSK_DATA
     			DEX 
-    			BNE $d72a
+    			BNE R_D72A
 R_D735: 	BIT DSK_CTL
     			BVS R_D735
     			STA DSK_DATA
@@ -3802,7 +3806,7 @@ R_D741: 	BIT DSK_CTL
     			BVS R_D741
     			STA DSK_DATA
     			DEX 
-    			BNE $d741
+    			BNE R_D741
 R_D74C: 	BIT DSK_CTL
     			BVS R_D74C
     			STA DSK_DATA
@@ -3816,7 +3820,7 @@ R_D762: 	BIT DSK_CTL
     			BVS R_D762
     			STA DSK_DATA
     			DEX 
-    			BNE $d762
+    			BNE R_D762
 R_D76D: 	BIT DSK_CTL
     			BVS R_D76D
     			STA DSK_DATA
@@ -3830,7 +3834,7 @@ R_D783: 	BIT DSK_CTL
     			BVS R_D783
     			STA DSK_DATA
     			DEX 
-    			BNE $d783
+    			BNE R_D783
 R_D78E: 	BIT DSK_CTL
     			BVS R_D78E
     			STA DSK_DATA
@@ -3851,7 +3855,7 @@ R_D7B4: 	BIT DSK_CTL
     			BVS R_D7B4
     			BPL R_D7C1
     			STY DSK_DATA
-    			JMP $d7b4
+    			JMP R_D7B4
 R_D7C1: 	PLA 
     			TAX 
     			JMP POPTWO
@@ -5220,7 +5224,7 @@ TASK:         	data.w DOCOL
 PADDINGD:       data.b $ff, $ff
                 data.b $ff
 
-if machine == machine_T20K {
+if t20k {
 ;;
 ;;	Headers of the words the T20K kernel adds. The development ROM is full,
 ;;	so they go in the space the kernel leaves in its own ROM.

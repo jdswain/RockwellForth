@@ -36,7 +36,8 @@ All in `src/`.
 |-----------|-----------|---------|--------|
 | `R6501Q` | R6501Q, stack in page zero | On-chip serial port | Assembles byte-for-byte to the Rockwell ROMs, apart from two deliberate edits (a fix to `0=` and the version string). |
 | `65C02` | 65C02, or a 65C816 left in emulation mode | R6501-style serial registers at `$15`-`$17` | Working. Tested on the Tang Nano 20K FPGA board in its Forth memory map. |
-| `T20K` | 65C816 in native mode, on the Tang Nano 20K FPGA board | 80x30 text display and serial port; serial or ADB keyboard | Working. See below. |
+| `T20K` | 65C816 in native mode, on the Tang Nano 20K FPGA board | 80x30 text display and serial port; serial or ADB keyboard | Loaded into RAM at `$A000` under the board's monitor. Boots in simulation; see below. |
+| `T20KROM` | The same | The same | The same Forth as a ROM at `$C000` in place of the monitor. Working. |
 | `65C816` | 65C816 emulator | Unfinished | Incomplete: the cold start does not set up the machine. Left as it was. |
 
 ## Building
@@ -68,15 +69,23 @@ kernel moves them. Add or subtract the difference; the listing shows where
 ## The Tang Nano 20K target
 
 The board is the 65C816 system-on-chip in the Verilog65C816 repository. Its
-Makefile builds the Forth and the bitstream that contains it:
+Makefile builds the Forth and gets it onto the board, in either of two ways:
 
     cd ../Verilog65C816/fpga
-    make forth          # assemble the ROM image, rom/forth.mem
-    make forth-bit      # build the bitstream
-    make prog           # load it into the FPGA (lost at power-off)
+    make forth-load             # T20K: load into RAM under MiniMon and start it
+    make forth-rom forth-bit    # T20KROM: a bitstream with the Forth as its ROM
+    make prog                   # ... loaded into the FPGA (lost at power-off)
 
-`make flash` writes it to the board's flash instead, so that it boots at
-power-on.
+`make forth-load` needs the board at the prompt of a MiniMon that has the `ld`
+command, and the serial port free. It sends the image, starts it with
+`go c008` and passes the terminal through until control-]. `FORTH_ENTRY` at
+`FORTH_BASE+$2008` is a jump to the cold start, for that `go`.
+
+The two targets differ in one constant, `FORTH_BASE` in `ForthKernel.asm`:
+`$A000` for `T20K` and `$C000` for `T20KROM`. The 16 KB are the development
+ROM, then the console driver at +`$2000` and the kernel at +`$3000`. In RAM
+the vectors at the end of the kernel are not used; the monitor's ROM has the
+processor's.
 
 The Forth comes up on the monitor and on the serial port (115200 baud, 8N1)
 with
@@ -101,15 +110,19 @@ CR. Words are upper case.
 | `$0200`-`$0FFF` | The board's I/O block |
 | `$1000`-`$107F` | User variables |
 | `$1080`-`$10FF` | Terminal input buffer |
-| `$1100`-`$B7F7` | Dictionary |
-| `$B7F8`-`$BFFF` | Two disk buffers |
-| `$C000`-`$DFFF` | Development ROM |
-| `$E000`-`$FFFF` | Console driver, extra dictionary headers and kernel, with about 4 KB free |
+| `$1100`-`$97F7` | Dictionary |
+| `$97F8`-`$9FFF` | Two disk buffers |
+| `$A000`-`$BFFF` | Development ROM |
+| `$C000`-`$DFFF` | Console driver, extra dictionary headers and kernel, with about 4 KB free |
+| `$E000`-`$FFFF` | The board's monitor ROM |
+
+That is the `T20K` target. For `T20KROM` everything from the disk buffers up
+is `$2000` higher and there is no monitor.
 
 The original keeps its user variables in page 3 and starts the dictionary at
 `$0400`. Both had to move because that is the board's I/O block. The addresses
 are the symbols `USER_BASE`, `DICT_BASE`, `BUF_FIRST` and `BUF_LIMIT` at the top
-of `ForthKernel.asm`.
+of `ForthKernel.asm`; the last two follow `FORTH_BASE`.
 
 ### Reaching memory above 64 KB
 
@@ -161,8 +174,8 @@ All of these are assembled differently when `native` is set.
 
 ### Not done yet
 
-* **No disk.** The disk registers point at eight zero bytes at the start of the
-  ROM, so the disk words return instead of hanging. `LOAD`, `LIST` and the
+* **No disk.** The disk registers point at eight zero bytes in front of the
+  console driver, so the disk words return instead of hanging. `LOAD`, `LIST` and the
   editor have nothing to work on.
 * **`?TERMINAL`** looks at the serial port only, not the keyboard.
 * **The Control-R check at start-up** (which forces a cold start) still reads
@@ -181,10 +194,10 @@ All of these are assembled differently when `native` is set.
 
 These apply to every target.
 
-* **Raw addresses are now labels.** The development ROM referred to about fifty
-  places in itself and in the kernel by number (`JMP $F5EC`, `data.w $FC70`),
-  which were only right for the R6501Q layout. The kernel can now change size
-  without breaking the development ROM.
+* **Raw addresses are now labels.** The development ROM referred to about sixty
+  places in itself and in the kernel by number (`JMP $F5EC`, `data.w $FC70`,
+  `BNE $D6C2`), which were only right for the R6501Q layout. The kernel can now
+  change size, and the whole Forth can move, without breaking it.
 * **Two branch offsets had been written as labels** (`data.w NMI` for `$FFFA`,
   `data.w RESET` for `$FFFC`) and are numbers again.
 * **The 65C02 and T20K cold starts clear `INTFLAG`**, which `NEXT` tests on

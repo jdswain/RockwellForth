@@ -51,6 +51,9 @@
 	;; display and ADB keyboard. See ForthConsole-T20K.asm.
 	machine_T20K = "T20K"
 
+	;; The same as a ROM at $C000 in place of the board's monitor.
+	machine_T20KROM = "T20KROM"
+
 	;; 	machine := machine_65C816
 	if machine {
 	  message "Assembling for ", machine
@@ -60,6 +63,7 @@
 	  message "   -Dmachine=\"65C02\""
 	  message "   -Dmachine=\"65C816\""
 	  message "   -Dmachine=\"T20K\""
+	  message "   -Dmachine=\"T20KROM\""
 	}
 	
 	if machine == machine_R6501Q {
@@ -74,29 +78,47 @@
         cpu := "65C816"
 	    stack_base := $0100
 	    start_offset := $400-$14+$0a-$0b-$09+$1d ; Space for extra vectors
-	} else if machine == machine_T20K {
+	} else {
+	;; T20K and T20KROM
         cpu := "65C816"
 	    stack_base := $0100
-	    start_offset := $1026			; pads the kernel so the vectors land at $FFFA
+	    start_offset := $1023			; pads the kernel so the vectors end the image
 	    ext_size := $100				; of that, kept for more dictionary headers
+	}
+
+	;; t20k: either of the two Tang Nano 20K targets
+	if machine == machine_T20K {
+	    t20k := 1
+	    FORTH_BASE := $a000
+	} else if machine == machine_T20KROM {
+	    t20k := 1
+	    FORTH_BASE := $c000
+	} else {
+	    t20k := 0
 	}
 
 * Memory layout
 
 	;; The original keeps its user variables and terminal input buffer in
 	;; page 3 and starts the dictionary at $0400. On the Tang Nano 20K
-	;; $0200-$0FFF is the I/O block, so everything moves above it, and with
-	;; 8 MB of RAM behind it the dictionary gets the whole of $1100-$B7F7.
+	;; $0200-$0FFF is the I/O block, so everything moves above it, and the
+	;; dictionary gets what is left below the Forth itself.
+	;;
+	;; FORTH_BASE is where the 16 KB of the Forth are: the development ROM,
+	;; then at +$2000 the console driver and at +$3000 the kernel. For T20K
+	;; it is at $A000, a program in RAM below MiniMon's ROM, loaded with the
+	;; monitor's ld command and started with go at FORTH_ENTRY. For T20KROM
+	;; it is at $C000, a ROM in place of the monitor with its vectors at $FFFA.
 	;;
 	;; native: the processor is a 65C816 in native mode. Direct page indexing
 	;; does not wrap there, and TXS with an 8 bit X clears the high byte of S.
-	if machine == machine_T20K {
+	if t20k {
 	    native := 1
 	    USER_BASE := $1000			; user variables, TIB at +$80
 	    DICT_BASE := $1100			; RAM dictionary
-	    BUF_FIRST := $b7f8			; disk buffers (two of $404 bytes)
-	    BUF_LIMIT := $c000
-	    ROM_SCAN := $c0				; page the search for a ROM starts at
+	    BUF_FIRST := FORTH_BASE-$808	; disk buffers (two of $404 bytes)
+	    BUF_LIMIT := FORTH_BASE
+	    ROM_SCAN := >FORTH_BASE		; page the search for a ROM starts at
 	} else {
 	    native := 0
 	    USER_BASE := $0300
@@ -188,15 +210,15 @@
 	Disk controller registers. For the R6501Q the disk registers must be available
 	at both $E000 and $E100. This should be fixed.
 *)
-	if machine == machine_T20K {
+	if t20k {
 	;; There is no disk controller yet. These point at eight zero bytes at
 	;; the start of the ROM so that anything polling the status sees "idle"
 	;; and returns, rather than hanging on whatever happens to be there.
-    	DSK_STATUS := $e000
-        DSK_TRACK := $e001
-        DSK_SECTOR := $e002
-        DSK_DATA := $e003
-        DSK_CTL := $e006
+    	DSK_STATUS := FORTH_BASE+$2000
+        DSK_TRACK := FORTH_BASE+$2001
+        DSK_SECTOR := FORTH_BASE+$2002
+        DSK_DATA := FORTH_BASE+$2003
+        DSK_CTL := FORTH_BASE+$2006
 	} else {
     	DSK_STATUS := $e000
         DSK_TRACK := $e101
@@ -209,10 +231,11 @@
 	This is a 4k ROM starting at $F400, but the first $400 bytes are not used
 *)
 
-	if machine == machine_T20K {
+	if t20k {
 	;; An 8k ROM: the console driver sits in front of the kernel proper.
-    		ORG := $e000
+    		ORG := FORTH_BASE+$2000
 			FILL.B 8, 0			; stand-in disk registers, see above
+FORTH_ENTRY:	JMP COLD+5			; where the monitor's go command starts it
 			Include "ForthConsole-T20K.asm"
 	;; Room for dictionary headers that do not fit in the development ROM,
 	;; which is full. ForthDevelopment.asm fills it.
@@ -618,7 +641,7 @@ EMIT:       DATA.W EMIT+2
 L504   		JSR L506
     		JMP POP
 L506   		JMP (UEMIT)
-	if machine == machine_T20K {
+	if t20k {
 XEMIT  		JMP CON_EMIT		; serial port and display
 	} else {
 XEMIT  		BIT SCSR
@@ -633,7 +656,7 @@ KEY:        DATA.W KEY+2
     		JSR L517
     		JMP PUSH0A
 L517   		JMP (UKEY)
-	if machine == machine_T20K {
+	if t20k {
 L518   		JMP CON_KEY			; serial port or keyboard
 	} else {
 L518   		LDA SCSR
@@ -646,7 +669,7 @@ L518   		LDA SCSR
 ;;    ?TERMINAL
 ;;
 QTERM:      DATA.W QTERM+2
-	if machine == machine_T20K {
+	if t20k {
     		LDA ser_status		; serial port only
     		AND #$08
 	} else {
@@ -1667,7 +1690,7 @@ L1485		CLC
 			XCE
 	;; ToDo: set up serial, interrupts, display etc.
 
-	} else if machine == machine_T20K {
+	} else if t20k {
 
 L1485		SEI
     		CLD 
@@ -2344,7 +2367,7 @@ BANKPOP:    DATA.W BANKPOP+2
 ;;
 ;;
 ;;
-	if machine == machine_T20K {
+	if t20k {
 	;; The bank here is the top byte of a 24 bit address, reached with long
 	;; indirect addressing rather than by switching anything.
 	;;
@@ -2391,7 +2414,7 @@ BANKCSTOR:  DATA.W DOCOL
 ;;
 ;;
 ;;
-	if machine == machine_T20K {
+	if t20k {
 	;; BANKC@ ( addr bank -- b )
 BANKCAT:    DATA.W BANKCAT+2
     		JSR BANKPTR
@@ -2528,5 +2551,9 @@ RESET:   	DATA.W COLD+5
 IRQ:	    DATA.W IRQJMP
 	}
 
+	if t20k {
+	errorif NMI != FORTH_BASE+$3ffa, "vectors do not end the image: adjust start_offset"
+	} else {
 	errorif NMI != $fffa, "vectors are not at $FFFA: adjust start_offset"
+	}
 
