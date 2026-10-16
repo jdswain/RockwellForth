@@ -36,7 +36,7 @@ All in `src/`.
 |-----------|-----------|---------|--------|
 | `R6501Q` | R6501Q, stack in page zero | On-chip serial port | Assembles byte-for-byte to the Rockwell ROMs, apart from two deliberate edits (a fix to `0=` and the version string). |
 | `65C02` | 65C02, or a 65C816 left in emulation mode | R6501-style serial registers at `$15`-`$17` | Working. Tested on the Tang Nano 20K FPGA board in its Forth memory map. |
-| `T20K` | 65C816 in native mode, on the Tang Nano 20K FPGA board | 80x30 text display and serial port; serial or ADB keyboard | Loaded into RAM at `$A000` under the board's monitor. Boots in simulation; see below. |
+| `T20K` | 65C816 in native mode, on the Tang Nano 20K FPGA board | 80x30 text display and serial port; serial or ADB keyboard | Loaded into RAM at `$A000` under the board's monitor. Working. |
 | `T20KROM` | The same | The same | The same Forth as a ROM at `$C000` in place of the monitor. Working. |
 | `65C816` | 65C816 emulator | Unfinished | Incomplete: the cold start does not set up the machine. Left as it was. |
 
@@ -87,7 +87,9 @@ ROM, then the console driver at +`$2000` and the kernel at +`$3000`. In RAM
 the vectors at the end of the kernel are not used; the monitor's ROM has the
 processor's.
 
-The Forth comes up on the monitor and on the serial port (115200 baud, 8N1)
+The serial port is channel A of the board's Z85C30 SCC, at `$0820`, which
+the FPGA emulates until the carrier board's Z85C80 exists. The Forth comes up
+on the monitor and on the serial port (115200 baud, 8N1)
 with
 
      RSC-FORTH V2.0

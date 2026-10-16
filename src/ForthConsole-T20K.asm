@@ -21,11 +21,18 @@
 * return stack is in page one on this machine, so $C2-$FF is free.             *
 ********************************************************************************
 
- 		ser_base = $0200
-		ser_data = ser_base + 0
-		ser_status = ser_base + 1	;bit 3 receiver full, bit 4 transmitter empty
-		ser_command = ser_base + 2
-		ser_control = ser_base + 3
+ 	;; The serial port is channel A of the Z85C30 SCC (the SCC half of
+	;; the Z85C80). Until the carrier board exists the FPGA emulates it at
+	;; the same address, on the board's serial port.
+		scc_base = $0820
+		scc_actl = scc_base + 2		;channel A control
+		scc_adata = scc_base + 3	;channel A data
+
+	;; With the register pointer at 0, reading the control port reads RR0.
+		ser_status = scc_actl
+		ser_data = scc_adata
+		ser_rxrdy = $01			;RR0: receive character available
+		ser_txrdy = $04			;RR0: transmit buffer empty
 
 	;; Entry points, called with 8 bit registers.
 CON_INIT:	php
@@ -52,7 +59,7 @@ CON_KEY:	php
 	;; Character in A
 ser_putc	pha
 ser_putc0	lda ser_status
-        	and #$10
+        	and #ser_txrdy
         	beq ser_putc0
 		pla
         	sta ser_data
@@ -101,10 +108,30 @@ ser_putc0	lda ser_status
 		con_blank = con_attr*256+$20	;a blank cell, as a word
 
 	;; Clears the screen, homes the cursor and switches the display to text.
-con_init	lda #$ff
-		sta ser_status		;programmed reset
-		lda #$02
-		sta ser_command		;no receive interrupt: the Forth runs with IRQs on
+	;; A register and its value, written in turn to channel A's control
+	;; port. The time constant is for a 7.3728 MHz clock on PCLK and RTxC:
+	;; 7372800 / (2 * 16 * 115200) - 2 = 0. The emulated SCC runs at a
+	;; fixed 115200 whatever is written. No interrupts are enabled: the
+	;; Forth runs with IRQs on.
+ser_inittab	data.b 9,$c0		;hardware reset
+		data.b 4,$44		;x16 clock, 1 stop bit, no parity
+		data.b 3,$c0		;receive 8 bits
+		data.b 5,$60		;transmit 8 bits
+		data.b 11,$50		;receive and transmit clocks from the BRG
+		data.b 12,0		;time constant, low
+		data.b 13,0		;time constant, high
+		data.b 14,$01		;BRG on, clocked from RTxC
+		data.b 3,$c1		;receiver on
+		data.b 5,$ea		;transmitter on, DTR and RTS asserted
+ser_initend
+
+con_init	lda ser_status		;puts the pointer back to 0
+		ldx #0
+con_init0	lda.w ser_inittab,x
+		sta scc_actl
+		inx
+		cpx #ser_initend-ser_inittab
+		bne con_init0
 		stz con_ptr
 		stz con_ptr+1
 		stz con_state
@@ -161,7 +188,7 @@ con_get0	lda kbd_next		;second event of the last packet
 		rts
 
 con_get1	lda ser_status		;serial first: it cannot wait
-		and #$08
+		and #ser_rxrdy
 		beq con_get2
 		lda ser_data
 		rts

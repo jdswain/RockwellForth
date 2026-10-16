@@ -82,7 +82,7 @@
 	;; T20K and T20KROM
         cpu := "65C816"
 	    stack_base := $0100
-	    start_offset := $1023			; pads the kernel so the vectors end the image
+	    start_offset := $1007			; pads the kernel so the vectors end the image
 	    ext_size := $100				; of that, kept for more dictionary headers
 	}
 
@@ -671,7 +671,7 @@ L518   		LDA SCSR
 QTERM:      DATA.W QTERM+2
 	if t20k {
     		LDA ser_status		; serial port only
-    		AND #$08
+    		AND #ser_rxrdy
 	} else {
     		LDA SCSR
     		AND #1
