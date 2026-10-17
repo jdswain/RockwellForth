@@ -187,8 +187,6 @@ All of these are assembled differently when `native` is set.
   arithmetic words still work a byte at a time.
 * **Interrupts are untested.** Nothing on the board raises one, and a handler
   would have to allow for being entered with 16-bit registers.
-* **The ADB keyboard is untested on hardware.** It works against a model in
-  simulation.
 * The words for the R6501's own ports and timers (`PA`, `PB`, `MCR`, `IFR` and
   so on) are still in the dictionary and address page zero.
 
