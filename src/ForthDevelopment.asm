@@ -1845,8 +1845,7 @@ LITERAL:         data.w DOCOL
 ;;
 CREATE5:        data.w COMPILE
                 data.w CLIT
-                data.b $aa
-    			data.b $c5
+                data.w CCOMMA		; C, (raw $C5AA in Rockwell's layout)
 				data.w SEMIS
 ;;
 ;;    DLITERAL
@@ -2037,6 +2036,9 @@ _QUIT             text.7 $84, "QUIT"
 ;;
 ;;
 QUIT:         data.w DOCOL
+if os16 {
+                  data.w TIBRESET  ; the terminal's TIB, the files included closed
+}
                   data.w ZERO
                   data.w BLK
                   data.w STORE
@@ -3709,7 +3711,9 @@ _FMTRK          text.7 $85, "FMTRK"
 if machine == machine_65C816 {
     			data.w _PSET           ; link to PSET
 } else {
-if t20k {
+if os16 {
+    			data.w _INCLUDE        ; link to INCLUDE, in the kernel ROM
+} else if t20k {
     			data.w _BANKAT         ; link to BANK@, in the kernel ROM
 } else {
     			data.w _BANKEXECUTE    ; link to BANKEXECUTE
@@ -5244,6 +5248,26 @@ _BANKSTOR       text.7 $85, "BANK!"
 _BANKAT         text.7 $85, "BANK@"
     			data.w _BANKSTOR    ; link to BANK!
     			data.w BANKAT+2    ; PFAPTR
+if os16 {
+;;
+;;    BYE
+;;
+_BYE            text.7 $83, "BYE"
+    			data.w _BANKAT      ; link to BANK@
+    			data.w BYE+2        ; PFAPTR
+;;
+;;    USING
+;;
+_USING          text.7 $85, "USING"
+    			data.w _BYE         ; link to BYE
+    			data.w USING+2      ; PFAPTR
+;;
+;;    INCLUDE
+;;
+_INCLUDE        text.7 $87, "INCLUDE"
+    			data.w _USING       ; link to USING
+    			data.w FINCLUDE+2   ; PFAPTR
+}
 
 	errorif org > EXT_BASE+ext_size, "extension headers overflow: raise ext_size"
 }

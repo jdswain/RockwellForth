@@ -54,6 +54,10 @@
 	;; The same as a ROM at $C000 in place of the board's monitor.
 	machine_T20KROM = "T20KROM"
 
+	;; OS16, the 65C816 machines' operating system: the T20K's Forth in a
+	;; bank of its own, in a Terminal window. See ForthConsole-OS16.asm.
+	machine_OS16 = "OS16"
+
 	;; 	machine := machine_65C816
 	if machine {
 	  message "Assembling for ", machine
@@ -64,6 +68,7 @@
 	  message "   -Dmachine=\"65C816\""
 	  message "   -Dmachine=\"T20K\""
 	  message "   -Dmachine=\"T20KROM\""
+	  message "   -Dmachine=\"OS16\""
 	}
 	
 	if machine == machine_R6501Q {
@@ -79,7 +84,7 @@
 	    stack_base := $0100
 	    start_offset := $400-$14+$0a-$0b-$09+$1d ; Space for extra vectors
 	} else {
-	;; T20K and T20KROM
+	;; T20K, T20KROM and OS16
         cpu := "65C816"
 	    stack_base := $0100
 	    start_offset := $1007			; pads the kernel so the vectors end the image
@@ -93,8 +98,21 @@
 	} else if machine == machine_T20KROM {
 	    t20k := 1
 	    FORTH_BASE := $c000
+	} else if machine == machine_OS16 {
+	    t20k := 1				; the T20K's layout, in OS16's bank
+	    FORTH_BASE := $a000
 	} else {
 	    t20k := 0
+	}
+
+	;; os16: OS16 runs the Forth, in a bank of its own (D, S, the data and
+	;; program banks all that bank). The console is OS16's terminal, and no
+	;; code is written to: the indirect jumps, whose pointers JMP (a)
+	;; would read from bank 0, go through the stack instead.
+	if machine == machine_OS16 {
+	    os16 := 1
+	} else {
+	    os16 := 0
 	}
 
 * Memory layout
@@ -235,13 +253,19 @@
 	;; An 8k ROM: the console driver sits in front of the kernel proper.
     		ORG := FORTH_BASE+$2000
 			FILL.B 8, 0			; stand-in disk registers, see above
+	if os16 {
+			Include "ForthConsole-OS16.asm"	; the link to OS16 first, at +$2008
+	} else {
 FORTH_ENTRY:	JMP COLD+5			; where the monitor's go command starts it
 			Include "ForthConsole-T20K.asm"
+	}
 	;; Room for dictionary headers that do not fit in the development ROM,
 	;; which is full. ForthDevelopment.asm fills it.
 EXT_BASE:
     		ORG := EXT_BASE+ext_size
+	if os16 == 0 {
  			FILL.B start_offset-ext_size, $ff
+	}
 	} else {
     		ORG := $f000
  			FILL.B start_offset, $ff
@@ -253,7 +277,11 @@ INITTAB:    DATA.W USER_BASE+$80		; TIB
 			DATA.W $00ff				; R0
 			DATA.W $0050				; C/L
 			DATA.W USER_BASE+$7e		; UPAD
+	if os16 {
+			DATA.W FILERW				; UR/W: blocks on a file
+	} else {
 			DATA.W DISK					; UR/W
+	}
 			DATA.W $000a				; BASE
 ;;
 ;;    LIT
@@ -309,8 +337,20 @@ NEXTY  		LDA $0000,Y			; Fetch code field address pointed
     		INY 				; Increment IP by two.
     		INY 
     		STY IP
+	if os16 {
+	;; JMP (W) would read W in bank 0: the code field's address is pushed
+	;; instead, less one, for an RTS to go to.
+    		TAY
+    		LDA $0000,Y
+    		DEC A
+    		PHA
     		SEP #$30
     		LDY #0
+    		RTS
+	} else {
+    		SEP #$30
+    		LDY #0
+	}
 	} else {
 NOINT  		LDY #$01
     		LDA (IP),Y			; Fetch code field address pointed
@@ -336,7 +376,21 @@ HANDLEINT:	BVS NOINT			; Are interrupts disabled?
     		LDA #$40
     		STA INTFLAG
     		LDY #0
+	if os16 {
+    		JMP JUMPW
+	} else {
     		JMP W-1
+	}
+	if os16 {
+;; JMP (W) through the stack, on OS16 (NEXT's own is inline). Y is 0,
+;; and A not kept.
+JUMPW  		REP #$20
+    		LDA (W)
+    		DEC A
+    		PHA
+    		SEP #$20
+    		RTS
+	}
 ;;
 ;;    CLIT pushes the next inline byte to data stack
 ;;
@@ -367,7 +421,11 @@ EXECUTE:    DATA.W EXECUTE+2
     		STA W+1
     		INX 
     		INX 
+	if os16 {
+    		JMP JUMPW
+	} else {
     		JMP W-1				; to JMP (W) in z-page
+	}
 ;;
 ;;    BRANCH
 ;;
@@ -640,7 +698,19 @@ EMIT:       DATA.W EMIT+2
     		LDA #8
 L504   		JSR L506
     		JMP POP
+	if os16 {
+;; JMP (UEMIT) would read UEMIT in bank 0. The character in A is kept.
+L506   		STA con_a
+    		REP #$20
+    		LDA UEMIT
+    		DEC A
+    		PHA
+    		SEP #$20
+    		LDA con_a
+    		RTS
+	} else {
 L506   		JMP (UEMIT)
+	}
 	if t20k {
 XEMIT  		JMP CON_EMIT		; serial port and display
 	} else {
@@ -655,7 +725,16 @@ XEMIT  		BIT SCSR
 KEY:        DATA.W KEY+2
     		JSR L517
     		JMP PUSH0A
+	if os16 {
+L517   		REP #$20			; JMP (UKEY), as L506's
+    		LDA UKEY
+    		DEC A
+    		PHA
+    		SEP #$20
+    		RTS
+	} else {
 L517   		JMP (UKEY)
+	}
 	if t20k {
 L518   		JMP CON_KEY			; serial port or keyboard
 	} else {
@@ -669,7 +748,9 @@ L518   		LDA SCSR
 ;;    ?TERMINAL
 ;;
 QTERM:      DATA.W QTERM+2
-	if t20k {
+	if os16 {
+    		JSR CON_QTERM		; a key typed and not yet read
+	} else if t20k {
     		LDA ser_status		; serial port only
     		AND #ser_rxrdy
 	} else {
@@ -1690,6 +1771,15 @@ L1485		CLC
 			XCE
 	;; ToDo: set up serial, interrupts, display etc.
 
+	} else if os16 {
+
+	;; From FENTER, native mode, D and S already the Forth's
+L1485		CLD
+			SEP #$30
+    		LDA #0
+    		STA INTFLAG
+			JSR CON_INIT
+
 	} else if t20k {
 
 L1485		SEI
@@ -1706,8 +1796,10 @@ L1485		SEI
     		STA INTFLAG
 			JSR CON_INIT		; serial port, text display, keyboard
 	}
-    		LDA #$6c
+	if os16 == 0 {
+    		LDA #$6c			; JMP (W) at W-1
     		STA W-1
+	}
     		LDA #<XEMIT
     		STA UEMIT
     		LDA #>XEMIT
@@ -1738,6 +1830,25 @@ L1505  		LDA #<(COLD+2)
     		STA INTVEC+1
     		LDY #$0d
     		JSR L1549
+	if os16 {
+    		LDA #<BREAK			; Control-C (ForthConsole-OS16.asm)
+    		STA INTVEC
+    		LDA #>BREAK
+    		STA INTVEC+1
+	;; The block buffers, which nothing above sets: USE and PREV the first,
+	;; and both buffers empty (block $7FFF, not the 0 of a zeroed bank,
+	;; which 0 BLOCK would take as read)
+    		REP #$20
+			longa=on
+    		LDA #BUF_FIRST
+    		STA USER_BASE+$40	; USE
+    		STA USER_BASE+$42	; PREV
+    		LDA #$7fff
+    		STA BUF_FIRST
+    		STA BUF_FIRST+$404
+    		SEP #$20
+			longa=off
+	}
 L1515  		LDA #>DSKBOOT
     		STA IP+1
     		LDA #<DSKBOOT
@@ -2443,6 +2554,151 @@ BANKEXEC:   DATA.W DOCOL
     		DATA.W EXECUTE
     		DATA.W BANKPOP
 
+	if os16 {
+;;
+;;    BYE - back to OS16's shell
+;;
+BYE:        DATA.W BYE+2
+    		JMP CON_BYE
+;;
+;;    BREAK - Control-C, typed in OS16's terminal: OS16 sets INTFLAG's
+;;    bit 7, and NEXT runs the word at INTVEC, which the cold start makes
+;;    this. The dictionary stays, the stacks are emptied, and QUIT reads
+;;    the next line.
+;;
+INTOFF:     DATA.W INTOFF+2		; INTFLAG cleared: Control-C taken again
+    		STY INTFLAG
+    		JMP NEXT
+BREAK:      DATA.W DOCOL
+    		DATA.W INTOFF
+    		DATA.W SPSTO
+    		DATA.W PDOTQ
+    		DATA.B $03, " ^C"
+    		DATA.W QUIT
+;;
+;;    Files, through OS16's Forth.Service (ForthConsole-OS16.asm's
+;;    CON_SVC). Each service prints its own error, so the words here
+;;    only stop (FERR) when one fails.
+;;
+;;    FILE-R/W ( addr blk f -- ) is R/W (UR/W): block blk of the blocks file
+;;    read into addr (f 1) or written from it (f 0)
+;;
+FILERW:     DATA.W DOCOL
+    		DATA.W XRW
+    		DATA.W ZBRAN
+    		DATA.W FILERW1-pc
+    		DATA.W FERR
+FILERW1:   	DATA.W SEMIS
+;;
+;;    USING name - the blocks file is name, from now on
+;;
+USING:      DATA.W DOCOL
+    		DATA.W FLUSH			; the old file's blocks written to it
+    		DATA.W EMPTYBUFFERS
+    		DATA.W BL
+    		DATA.W FWORD
+    		DATA.W HERE
+    		DATA.W XUSING
+    		DATA.W ZBRAN
+    		DATA.W USING1-pc
+    		DATA.W FERR
+USING1:    	DATA.W SEMIS
+;;
+;;    INCLUDE name - the text file name interpreted, a line at a time, into
+;;    a line buffer of its own (OS16 nests four), with BLK 0. TIB, BLK and
+;;    IN are put back after, so the rest of the line that names it runs.
+;;
+FINCLUDE:   DATA.W DOCOL
+    		DATA.W BL
+    		DATA.W FWORD
+    		DATA.W HERE
+    		DATA.W XINCL			; ( -- buffer ), 0 if the file can't be read
+    		DATA.W DDUP
+    		DATA.W ZBRAN
+    		DATA.W INCL3-pc
+    		DATA.W TIB
+    		DATA.W AT
+    		DATA.W GTR
+    		DATA.W BLK
+    		DATA.W AT
+    		DATA.W GTR
+    		DATA.W IN
+    		DATA.W AT
+    		DATA.W GTR
+    		DATA.W TIB
+    		DATA.W STORE
+    		DATA.W ZERO
+    		DATA.W BLK
+    		DATA.W STORE
+INCL1:   	DATA.W XLINE			; ( -- f ): the next line in the buffer
+    		DATA.W ZBRAN
+    		DATA.W INCL2-pc
+    		DATA.W ZERO
+    		DATA.W IN
+    		DATA.W STORE
+    		DATA.W INTERPRET
+    		DATA.W BRAN
+    		DATA.W INCL1-pc
+INCL2:   	DATA.W RFROM
+    		DATA.W IN
+    		DATA.W STORE
+    		DATA.W RFROM
+    		DATA.W BLK
+    		DATA.W STORE
+    		DATA.W RFROM
+    		DATA.W TIB
+    		DATA.W STORE
+    		DATA.W SEMIS
+INCL3:   	DATA.W FERR
+;;
+;;    A service has failed and said why: the stacks emptied, back to QUIT
+;;
+FERR:       DATA.W DOCOL
+    		DATA.W SPSTO
+    		DATA.W QUIT
+;;
+;;    The services' words. Each gives the service the top three cells.
+;;
+XRW:        DATA.W XRW+2		; ( addr blk f -- n )
+    		LDA #SV_BLOCK
+    		JSR CON_SVC
+    		INX
+    		INX
+    		INX
+    		INX
+XRES   		LDA os_res			; the service's result on top
+    		STA 0,X
+    		LDA os_res+1
+    		STA 1,X
+    		JMP NEXT
+XUSING:     DATA.W XUSING+2		; ( name -- n )
+    		LDA #SV_USING
+    		JSR CON_SVC
+    		JMP XRES
+XINCL:      DATA.W XINCL+2		; ( name -- buffer )
+    		LDA #SV_INCLUDE
+    		JSR CON_SVC
+    		JMP XRES
+XLINE:      DATA.W XLINE+2		; ( -- f )
+    		LDA #SV_LINE
+    		JSR CON_SVC
+    		DEX
+    		DEX
+    		JMP XRES
+;;
+;;    The terminal's TIB again, and the files being included closed (after
+;;    an error in one, they are where it was): the start of QUIT
+;;
+TIBRESET:   DATA.W TIBRESET+2
+    		LDA #<(USER_BASE+$80)
+    		STA TIBX
+    		LDA #>(USER_BASE+$80)
+    		STA TIBX+1
+    		LDA #SV_RESET
+    		JSR CON_SVC
+    		JMP NEXT
+	}
+
 unkn5: 		STA W
     		STY W+1
     		LDY #0
@@ -2457,7 +2713,11 @@ L2134  		LDA #<unkn6
     		STA IP
     		LDA #>unkn6
     		STA IP+1
+	if os16 {
+    		JMP JUMPW
+	} else {
     		JMP W-1
+	}
 	
 unkn6:      DATA.W $005d
 
@@ -2551,7 +2811,9 @@ RESET:   	DATA.W COLD+5
 IRQ:	    DATA.W IRQJMP
 	}
 
-	if t20k {
+	if os16 {
+	errorif pc > FORTH_BASE+$4000, "the kernel runs past the Forth's 16 KB"
+	} else if t20k {
 	errorif NMI != FORTH_BASE+$3ffa, "vectors do not end the image: adjust start_offset"
 	} else {
 	errorif NMI != $fffa, "vectors are not at $FFFA: adjust start_offset"

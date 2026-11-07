@@ -26,6 +26,7 @@ All in `src/`.
 |------|------------|
 | `ForthKernel.asm`, `ForthDevelopment.asm` | The main source. One file pair, several target machines, chosen with `-Dmachine=`. |
 | `ForthConsole-T20K.asm` | Display, keyboard and serial driver for the Tang Nano 20K target. Included by the kernel for that target only. |
+| `ForthConsole-OS16.asm` | The console for OS16: the link to OS16's `Forth` module, KEY and EMIT through its terminal. Included by the kernel for that target only. |
 | `ForthKernel-Rockwell.asm`, `ForthDevelopment-Rockwell.asm` | The original disassembly, kept as the reference. |
 | `ForthKernel-RC19.asm` | Kernel for the Rockwell R65C19 family. |
 | `ForthKernel-L28.asm`, `ForthDevelopment-L28.asm` | The L28 microcontroller version, with its LCD and keyboard. Built by `src/Makefile`. |
@@ -38,6 +39,7 @@ All in `src/`.
 | `65C02` | 65C02, or a 65C816 left in emulation mode | R6501-style serial registers at `$15`-`$17` | Working. Tested on the Tang Nano 20K FPGA board in its Forth memory map. |
 | `T20K` | 65C816 in native mode, on the Tang Nano 20K FPGA board | 80x30 text display and serial port; serial or ADB keyboard | Loaded into RAM at `$A000` under the board's monitor. Working. |
 | `T20KROM` | The same | The same | The same Forth as a ROM at `$C000` in place of the monitor. Working. |
+| `OS16` | The same, under OS16 | OS16's Terminal | The `T20K` Forth in a bank of its own, a command of OS16's shell (`forth`). Working. |
 | `65C816` | 65C816 emulator | Unfinished | Incomplete: the cold start does not set up the machine. Left as it was. |
 
 ## Building
@@ -190,6 +192,41 @@ All of these are assembled differently when `native` is set.
 * The words for the R6501's own ports and timers (`PA`, `PB`, `MCR`, `IFR` and
   so on) are still in the dictionary and address page zero.
 
+## The OS16 target
+
+OS16, the operating system of the 65C816 machines (`../OS16`), runs the
+`T20K` Forth as the shell's `forth` command, in a Terminal window. OS16's
+build assembles this source with `-Dmachine='"OS16"'` and makes the image
+an OS16 module. `../OS16/app/forth/README.md` describes how it runs.
+`os16` is set for this target, and `t20k` too, because it has the
+`T20K`'s layout:
+
+* **A bank of its own.** OS16 has the board's banked direct page and stack
+  (`../Verilog65C816/docs/BankedDP.md`). The Forth's direct page and return
+  stack are page 0 and 1 of its bank, and its data and program banks are
+  that bank too. So the Forth runs at the `T20K`'s addresses, from `$A000`.
+* **The console** is `ForthConsole-OS16.asm`, in the T20K console's place.
+  It starts with the link at `FORTH_BASE+$2008`, which OS16's `Forth` module
+  reads: `FENTER`, the entry OS16 calls, the Forth's D, the address of the
+  service that `os_call` reaches, and the output buffer. `KEY`, `EMIT` and
+  `?TERMINAL` go to OS16's terminal through the service. `BYE`, a word of
+  this target only, returns to the shell.
+* **No `JMP (a)`.** Its pointer is read from bank 0, which is OS16's. NEXT,
+  `EXECUTE` and the `UEMIT` and `UKEY` vectors push the address, less one,
+  and `RTS` to it. NEXT does it inline. `JMP W-1`, and the `$6C` that the
+  cold start wrote there, are gone: no code is written to.
+* **The cold start** is entered from `FENTER`, already in native mode with D
+  and S set. There are no vectors, and nothing pads the kernel to `$FFFA`.
+* **Files.** `UR/W` is `FILE-R/W`, which reads and writes 1K blocks of a
+  file through OS16, in place of `DISK`. `USING name` names the blocks file,
+  and `INCLUDE name` interprets a text file a line at a time. Both are words
+  of this target only. The cold start sets `USE` and `PREV` and marks the
+  buffers empty. The other targets' cold start doesn't, and here the first
+  `BLOCK` used address 0. `QUIT` starts with `TIBRESET`.
+* **Control-C** uses the kernel's own interrupt check. NEXT tests `INTFLAG`
+  before every word. OS16 sets its bit 7 when Control-C is typed, and the cold
+  start makes `INTVEC` `BREAK`: the stacks emptied, ` ^C`, `QUIT`.
+
 ## Changes made to the original source
 
 These apply to every target.
@@ -198,6 +235,10 @@ These apply to every target.
   places in itself and in the kernel by number (`JMP $F5EC`, `data.w $FC70`,
   `BNE $D6C2`), which were only right for the R6501Q layout. The kernel can now
   change size, and the whole Forth can move, without breaking it.
+* **`LITERAL` called `C,` by its raw address.** For a number below 256 it
+  compiled `CLIT`, then went on to `$C5AA` (as two `data.b`), which is `C,`
+  only in Rockwell's layout. On the `T20K`, `: E 7 ;` crashed. It is
+  `data.w CCOMMA` now. The R6501Q build is unchanged.
 * **Two branch offsets had been written as labels** (`data.w NMI` for `$FFFA`,
   `data.w RESET` for `$FFFC`) and are numbers again.
 * **The 65C02 and T20K cold starts clear `INTFLAG`**, which `NEXT` tests on
